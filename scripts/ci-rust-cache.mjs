@@ -77,9 +77,9 @@ export function sourceKey(root) {
     return source.digest('hex');
 }
 
-export function cacheKeys(root) {
+export function environmentKeys(compiler, env = process.env) {
     const buildEnv = Object.fromEntries(
-        Object.entries(process.env)
+        Object.entries(env)
             .filter(([key]) =>
                 /^(RUSTFLAGS$|CARGO_ENCODED_RUSTFLAGS$|CARGO_PROFILE_|CARGO_TARGET_|CC$|CXX$|CFLAGS$|CXXFLAGS$|ImageOS$|ImageVersion$)/.test(
                     key,
@@ -87,17 +87,24 @@ export function cacheKeys(root) {
             )
             .sort(([a], [b]) => a.localeCompare(b)),
     );
+    const legacyKey = digest(JSON.stringify({ ...compiler, buildEnv }));
+    // 镜像修订滚动发布时，同批 job 也会拿到不同版本；保留旧 key 仅用于迁移已有缓存。
+    delete buildEnv.ImageVersion;
+    return {
+        'environment-key': digest(JSON.stringify({ ...compiler, buildEnv })),
+        'legacy-environment-key': legacyKey,
+    };
+}
+
+export function cacheKeys(root) {
     return {
         'source-key': sourceKey(root),
-        'environment-key': digest(
-            JSON.stringify({
-                rustc: execFileSync('rustc', ['-vV'], { encoding: 'utf8' }).trim(),
-                cargo: execFileSync('cargo', ['-V'], { encoding: 'utf8' }).trim(),
-                platform: platform(),
-                arch: arch(),
-                buildEnv,
-            }),
-        ),
+        ...environmentKeys({
+            rustc: execFileSync('rustc', ['-vV'], { encoding: 'utf8' }).trim(),
+            cargo: execFileSync('cargo', ['-V'], { encoding: 'utf8' }).trim(),
+            platform: platform(),
+            arch: arch(),
+        }),
         'cargo-home': process.env.CARGO_HOME || resolve(homedir(), '.cargo'),
     };
 }

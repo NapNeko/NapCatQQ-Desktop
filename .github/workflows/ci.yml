@@ -230,7 +230,8 @@ jobs:
           key: rust-tests-v5-${{ matrix.group }}-${{ !inputs.force_full && github.event.inputs.suite == 'rust-smoke' && 'smoke' || 'full' }}-${{ steps.inputs.outputs.environment-key }}-${{ steps.inputs.outputs.source-key }}
           restore-keys: |
             rust-tests-v5-${{ matrix.group }}-${{ !inputs.force_full && github.event.inputs.suite == 'rust-smoke' && 'smoke' || 'full' }}-${{ steps.inputs.outputs.environment-key }}-
-            rust-tests-v4-core-${{ !inputs.force_full && github.event.inputs.suite == 'rust-smoke' && 'smoke' || 'full' }}-${{ steps.inputs.outputs.environment-key }}-
+            rust-tests-v5-${{ matrix.group }}-${{ !inputs.force_full && github.event.inputs.suite == 'rust-smoke' && 'smoke' || 'full' }}-${{ steps.inputs.outputs.legacy-environment-key }}-
+            rust-tests-v4-core-${{ !inputs.force_full && github.event.inputs.suite == 'rust-smoke' && 'smoke' || 'full' }}-${{ steps.inputs.outputs.legacy-environment-key }}-
 
       - name: Restore Cargo input timestamps
         run: node scripts/ci-rust-cache.mjs restore
@@ -350,6 +351,7 @@ jobs:
           key: rust-tests-v4-shell-${{ steps.inputs.outputs.environment-key }}-${{ steps.inputs.outputs.source-key }}
           restore-keys: |
             rust-tests-v4-shell-${{ steps.inputs.outputs.environment-key }}-
+            rust-tests-v4-shell-${{ steps.inputs.outputs.legacy-environment-key }}-
 
       - name: Restore Cargo input timestamps
         run: node scripts/ci-rust-cache.mjs restore
@@ -423,6 +425,7 @@ jobs:
           key: rust-tests-v5-linux-${{ steps.inputs.outputs.environment-key }}-${{ steps.inputs.outputs.source-key }}
           restore-keys: |
             rust-tests-v5-linux-${{ steps.inputs.outputs.environment-key }}-
+            rust-tests-v5-linux-${{ steps.inputs.outputs.legacy-environment-key }}-
 
       - name: Restore Cargo input timestamps
         run: node scripts/ci-rust-cache.mjs restore

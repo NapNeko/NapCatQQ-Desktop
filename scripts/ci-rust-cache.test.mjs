@@ -12,7 +12,31 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { test } from 'node:test';
-import { captureInputs, restoreInputs, sourceKey } from './ci-rust-cache.mjs';
+import { captureInputs, environmentKeys, restoreInputs, sourceKey } from './ci-rust-cache.mjs';
+
+test('runner image revisions share caches without mixing toolchains or build flags', () => {
+    const compiler = { rustc: 'rustc 1', cargo: 'cargo 1', platform: 'win32', arch: 'x64' };
+    const env = {
+        ImageOS: 'win25',
+        ImageVersion: '20261021.278.1',
+        RUSTFLAGS: '-C debuginfo=0',
+    };
+    const first = environmentKeys(compiler, env);
+    const nextImage = environmentKeys(compiler, { ...env, ImageVersion: '20261030.294.1' });
+    assert.equal(first['environment-key'], nextImage['environment-key']);
+    assert.notEqual(first['legacy-environment-key'], nextImage['legacy-environment-key']);
+    for (const changedEnv of [{ ImageOS: 'win22' }, { RUSTFLAGS: '-C debuginfo=2' }]) {
+        assert.notEqual(
+            first['environment-key'],
+            environmentKeys(compiler, { ...env, ...changedEnv })['environment-key'],
+        );
+    }
+    assert.notEqual(
+        first['environment-key'],
+        environmentKeys({ ...compiler, rustc: 'rustc 2' }, env)['environment-key'],
+    );
+    assert.equal(env.ImageVersion, '20261021.278.1');
+});
 
 function fixture(t, files) {
     const root = mkdtempSync(resolve(tmpdir(), 'ncd-ci-cache-'));
