@@ -8,7 +8,6 @@ use std::fmt;
 use ts_rs::TS;
 
 use crate::bot_config::{WebsocketClientConfig, WebsocketServerConfig};
-use crate::deployment_task::AppStoreResource;
 use crate::ids::BotId;
 use crate::kinds::RuntimeTarget;
 
@@ -324,9 +323,6 @@ pub struct AppFrameworkManifest {
     /// 真相仍是 Component::requirements()，注册表测试保证两者一致
     #[serde(default)]
     pub runtime_component_ids: Vec<String>,
-    /// 商店 Tab 对应的资源；空 = 无商店。UI 按此挂 Tab，不写框架名。
-    #[serde(default)]
-    pub store_resources: Vec<AppStoreResource>,
     /// 新建实例是否展示「一并安装渲染器」
     #[serde(default)]
     pub has_install_renderer: bool,
@@ -592,22 +588,6 @@ pub struct CreateAppInstanceRequest {
     pub accept_terms: Option<bool>,
 }
 
-/// 「原始文件」里展示的 **Bot 侧** 配置文件（只读）。
-///
-/// 与应用端自己的 AppConfigDocument 分开：那些相对实例目录读写、可编辑；
-/// 这些在**协议 Bot 的配置目录**里（对接时 Desktop 写进去的 WS 客户端连接），
-/// 所属主机与路径根都不一样，混进同一套「相对路径」语义只会出错，所以单独一类。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
-pub struct AppLinkBotDocument {
-    /// 文件名，例如 onebot11_10001.json
-    pub name: String,
-    /// 绝对路径（给人看，显示在标题旁）
-    pub path: String,
-    /// 文件内容；文件还没生成时为 None
-    pub text: Option<String>,
-}
-
 /// 探测已有项目目录（导入前）
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -650,7 +630,7 @@ pub struct ImportAppInstanceRequest {
     pub display_name: String,
 }
 
-/// 配置文件格式（原始文件 Tab 决定预检与高亮）
+/// 配置文件格式，用于语法校验与编辑器高亮。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -661,7 +641,7 @@ pub enum AppConfigFormat {
     Yaml,
 }
 
-/// 应用端实例的一个可编辑配置文件（框架适配器声明；原始文件 Tab 与类型化读写共用）
+/// 框架适配器声明的可编辑配置文件。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AppConfigDocument {
@@ -672,61 +652,19 @@ pub struct AppConfigDocument {
     /// 相对实例目录的路径（POSIX 写法）
     pub rel_path: String,
     pub format: AppConfigFormat,
-    /// 应用端自己会热加载该文件；false 表示改完要重启实例
+    /// 应用端会自动重载文件中的运行期配置；不代表所有字段都能即时生效。
     pub hot_reload: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reload_note: Option<String>,
 }
 
-/// 配置文件原文 + 版本号（版本号 = 内容哈希；写回需带 base_revision 防覆盖）
+/// 配置文件原文及读入时的版本，保存时用于检测外部修改。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AppConfigText {
     pub doc_id: String,
     pub text: String,
-    /// 文件不存在时为 `"missing"`
     pub revision: String,
-}
-
-/// 插件配置表单里一个字段的类型。`Json` 是兜底：框架 schema 里桌面端不认的类型按 JSON 源码编辑。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
-pub enum AppPluginConfigFieldKind {
-    String,
-    Text,
-    Int,
-    Float,
-    Bool,
-    List,
-    Object,
-    Json,
-}
-
-/// 插件配置表单字段（由框架 schema 翻译；默认值不过 IPC，缺文件时由后端按 schema 物化到文档）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
-pub struct AppPluginConfigField {
-    pub key: String,
-    pub kind: AppPluginConfigFieldKind,
-    pub label: String,
-    #[serde(default)]
-    pub hint: String,
-    #[serde(default)]
-    pub obvious_hint: bool,
-    #[serde(default)]
-    pub secret: bool,
-    #[serde(default)]
-    pub options: Vec<String>,
-    /// `Object` 的子字段
-    #[serde(default)]
-    pub items: Vec<AppPluginConfigField>,
-}
-
-/// 插件配置表单：绑定到哪份文档 + 字段树。None 表示该插件只能改原文。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
-pub struct AppPluginConfigSchema {
-    pub doc_id: String,
-    pub fields: Vec<AppPluginConfigField>,
 }
 
 /// 校验问题（`path` 用 JSON pointer 风格定位到字段，如 "env/http_port" / "groups/2/mode"）
