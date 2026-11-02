@@ -27,6 +27,10 @@ impl DebugManager {
     /// 订阅领域事件总线，按 Bot 的状态变化收拾接收器和会话。启动时 spawn 一次
     pub async fn run_bot_event_listener(self: Arc<Self>, bus: Arc<dyn EventBus>) {
         let mut events = bus.subscribe(EventFilter::all());
+        let mut connections = self
+            .host_resolver
+            .connection_updates()
+            .map(ncd_server::ConnectionObserver::new);
         let shutdown = self.shutdown.clone();
         let manager = Arc::downgrade(&self);
         drop(self);
@@ -34,7 +38,25 @@ impl DebugManager {
             let event = tokio::select! {
                 biased;
                 _ = shutdown.cancelled() => return,
-                event = events.next() => event,
+                change = async {
+                    match connections.as_mut() {
+                        Some(observer) => observer.next().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    let Some((server_id, snapshot)) = change else { return; };
+                    match snapshot.state {
+                        ncd_server::ServerState::Connected => Some(DomainEvent::HostConnectionRecovered { server_id, latency_ms: 0 }),
+                        ncd_server::ServerState::Disconnected | ncd_server::ServerState::Failed => Some(DomainEvent::HostConnectionLost { server_id, reason: None, consecutive_failures: 0 }),
+                        ncd_server::ServerState::Connecting => continue,
+                    }
+                },
+                event = events.next() => {
+                    if connections.is_some() && matches!(event, Some(DomainEvent::HostConnectionRecovered { .. } | DomainEvent::HostConnectionLost { .. })) {
+                        continue;
+                    }
+                    event
+                },
             };
             let Some(event) = event else {
                 return;
@@ -75,7 +97,8 @@ impl DebugManager {
             DomainEvent::SnowLumaDockerEndpointsReady { bot_id } => {
                 self.hurry_internal_receiver(bot_id);
             }
-            DomainEvent::HostConnectionRecovered { server_id, .. } => {
+            DomainEvent::HostConnectionRecovered { server_id, .. }
+            | DomainEvent::HostConnectionLost { server_id, .. } => {
                 for view in self.bots.list_bots().await {
                     if matches!(&view.config.bot.runtime_target, ncd_domain::RuntimeTarget::Server(id) if id == server_id)
                     {

@@ -29,6 +29,21 @@ impl TauriHostResolver {
 
 #[async_trait]
 impl HostResolver for TauriHostResolver {
+    fn connection_updates(&self) -> Option<ncd_runtime::host_resolver::ConnectionUpdates> {
+        Some(self.server_manager.connection_updates())
+    }
+
+    async fn is_registered(&self, target: &RuntimeTarget) -> Result<bool, HostResolveError> {
+        match target {
+            RuntimeTarget::Local => Ok(true),
+            RuntimeTarget::Server(id) => self
+                .server_manager
+                .contains_server(id)
+                .await
+                .map_err(HostResolveError::from),
+        }
+    }
+
     async fn resolve(&self, target: &RuntimeTarget) -> Result<Arc<dyn Host>, HostResolveError> {
         match target {
             RuntimeTarget::Local => Ok(Arc::clone(&self.local)),

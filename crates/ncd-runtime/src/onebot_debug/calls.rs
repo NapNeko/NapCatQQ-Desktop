@@ -801,9 +801,14 @@ impl DebugManager {
             let session = self
                 .live_session(&mut sessions, view, epoch)
                 .ok_or_else(|| Failure::new(self.stale_error()))?;
-            if let Some(tunnel) = session.tunnels.get(key) {
+            if let Some(tunnel) = session
+                .tunnels
+                .get(key)
+                .filter(|tunnel| !tunnel.is_closed())
+            {
                 return Ok(tunnel.local_port());
             }
+            session.tunnels.remove(key);
         }
         let host = self
             .host_resolver

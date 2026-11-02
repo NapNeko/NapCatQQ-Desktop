@@ -853,6 +853,109 @@ async fn snowluma_waits_for_onebot_after_qq_login_and_recovers_without_another_l
 // ─── NapCat 调试适配器 ───────────────────────────────────────────────────────
 
 #[tokio::test]
+async fn remote_receiver_recovers_a_cached_but_unreachable_endpoint_without_a_host_event() {
+    let h = harness();
+    let up = Upstream::start().await;
+    let mut config = remote_bot(20_002, DeploymentType::Native);
+    config.bot.backend_type = BackendType::SnowLuma;
+    let bot = h.bots.add(config, true);
+    let stale = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let stale_port = stale.local_addr().unwrap().port();
+    // 明确断开旧端点；Windows 向未监听端口建连可能耗时数秒，不能拿它当立即失败。
+    let stale_server = tokio::spawn(async move {
+        while let Ok((stream, _)) = stale.accept().await {
+            drop(stream);
+        }
+    });
+    h.bots.set_snowluma(&bot, stale_port);
+    h.bots
+        .recovered_snowluma
+        .lock()
+        .unwrap()
+        .insert(bot.clone(), (up.port, "pw".into()));
+    let (sink, subscription) = subscribe(&h, &bot, DebugChannelId::Internal).await;
+    let connected = tokio::time::timeout(Duration::from_secs(5), async {
+        while sink.connected_count() != 1 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    stale_server.abort();
+    assert!(
+        connected.is_ok(),
+        "旧端点未恢复: events={:?}, recovery_calls={}, upstream_paths={:?}",
+        sink.events(),
+        h.bots.recovery_calls.load(Ordering::SeqCst),
+        up.paths(),
+    );
+    assert!(h.bots.recovery_calls.load(Ordering::SeqCst) > 0);
+    assert_eq!(h.manager.receivers().await[0].viewers, 1);
+    up.push(json!({"kind":"event", "uin":"20002", "event":group_message(1)}));
+    wait_until("恢复后收到消息", || sink.ob11().len() == 1).await;
+    h.manager.unsubscribe(&subscription.subscription_id).await;
+}
+
+#[tokio::test]
+async fn remote_receiver_uses_the_kernel_snapshot_when_the_domain_bus_is_full() {
+    struct WatchedHost {
+        host: Arc<dyn Host>,
+        updates: ncd_server::ConnectionUpdates,
+    }
+    #[async_trait::async_trait]
+    impl crate::HostResolver for WatchedHost {
+        fn connection_updates(&self) -> Option<ncd_server::ConnectionUpdates> {
+            Some(self.updates.clone())
+        }
+        async fn resolve(
+            &self,
+            _: &ncd_domain::RuntimeTarget,
+        ) -> Result<Arc<dyn Host>, crate::HostResolveError> {
+            Ok(self.host.clone())
+        }
+    }
+    let mut h = harness();
+    let (states, updates) = tokio::sync::watch::channel(ncd_server::ConnectionSnapshots::new());
+    h.manager = Arc::new(DebugManager::new(
+        h.bots.clone(),
+        Arc::new(WatchedHost {
+            host: h.host.clone(),
+            updates,
+        }),
+        h.data.path().to_path_buf(),
+    ));
+    let first = Upstream::start().await;
+    let next = Upstream::start().await;
+    let bot = h.bots.add(remote_bot(10_001, DeploymentType::Native), true);
+    h.bots.set_napcat(&bot, first.port);
+    let (sink, subscription) = subscribe(&h, &bot, DebugChannelId::Internal).await;
+    wait_until("初始消息流", || sink.connected_count() == 1).await;
+    let bus = Arc::new(crate::BroadcastEventBus::new(1));
+    let worker = tokio::spawn(h.manager.clone().run_bot_event_listener(bus.clone()));
+    h.bots.set_napcat(&bot, next.port);
+    for _ in 0..2048 {
+        bus.publish(DomainEvent::bot_log("unrelated", "log"));
+    }
+    states.send_modify(|states| {
+        states.insert(
+            "vps".into(),
+            ncd_server::ConnectionSnapshot {
+                generation: 2,
+                revision: 0,
+                recovery_requested: 0,
+                state: ncd_server::ServerState::Connected,
+            },
+        );
+    });
+    wait_until("无需广播恢复事件即可切换连接", || {
+        sink.connected_count() == 2 && next.streams() == 1
+    })
+    .await;
+    assert_eq!(h.manager.receivers().await[0].viewers, 1);
+    h.manager.unsubscribe(&subscription.subscription_id).await;
+    worker.abort();
+}
+
+#[tokio::test]
 async fn host_recovery_replaces_nc_and_sl_streams_without_losing_subscribers_or_history() {
     for backend in [BackendType::NapCat, BackendType::SnowLuma] {
         let h = harness();

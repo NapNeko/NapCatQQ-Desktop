@@ -42,7 +42,7 @@ use ncd_traits::{BotConfigRepo, ConfigStore, JsonTransaction, SecretStore};
 pub mod auto_restart;
 mod debug_port;
 mod helpers;
-mod host_recovery;
+pub(crate) mod host_recovery;
 mod listeners;
 mod metrics;
 mod migration;
@@ -228,7 +228,6 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     /// See RemoteQqEntryCoordinator for rationale and batch-start safety.
     remote_qq_entry_coordinator: Arc<RemoteQqEntryCoordinator>,
     server_manager: Option<Arc<crate::ServerManager>>,
-    debug_recovery: host_recovery::DebugRecoveryGates,
     reconcile_locks: crate::bootstrap_reconcile::ReconcileLocks,
     refresh_lock: Arc<Mutex<()>>,
     config_write_lock: Arc<Mutex<()>>,
@@ -274,7 +273,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             remote_snowluma_tunnels: Arc::clone(&self.remote_snowluma_tunnels),
             remote_qq_entry_coordinator: Arc::clone(&self.remote_qq_entry_coordinator),
             server_manager: self.server_manager.clone(),
-            debug_recovery: Arc::clone(&self.debug_recovery),
             reconcile_locks: Arc::clone(&self.reconcile_locks),
             refresh_lock: Arc::clone(&self.refresh_lock),
             config_write_lock: Arc::clone(&self.config_write_lock),
@@ -374,7 +372,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             remote_snowluma_tunnels: Arc::new(RemoteSnowLumaTunnelRegistry::new()),
             remote_qq_entry_coordinator: Arc::new(RemoteQqEntryCoordinator::default()),
             server_manager: None,
-            debug_recovery: Arc::new(Mutex::new(HashMap::new())),
             reconcile_locks: Arc::new(Mutex::new(HashMap::new())),
             refresh_lock: Arc::new(Mutex::new(())),
             config_write_lock: Arc::new(Mutex::new(())),
@@ -780,6 +777,44 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
     /// 绑定在该主机上的所有远端 bot(Docker / Native)补跑一轮运行态恢复。
     pub async fn reconcile_remote_runtimes_for_server(
+        &self,
+        target_server_id: &str,
+    ) -> Result<Vec<BotId>, BotManagerError> {
+        let updates = self
+            .server_manager
+            .as_ref()
+            .map(|servers| servers.connection_updates())
+            .or_else(|| {
+                self.host_resolver
+                    .as_ref()
+                    .and_then(|resolver| resolver.connection_updates())
+            });
+        let Some(mut updates) = updates else {
+            return self.reconcile_server_inner(target_server_id).await;
+        };
+        let generation = updates
+            .borrow()
+            .get(target_server_id)
+            .map(|state| state.generation);
+        let superseded = async {
+            while updates.changed().await.is_ok() {
+                if updates
+                    .borrow()
+                    .get(target_server_id)
+                    .map(|state| state.generation)
+                    != generation
+                {
+                    break;
+                }
+            }
+        };
+        tokio::select! {
+            result = self.reconcile_server_inner(target_server_id) => result,
+            _ = superseded => Err(BotManagerError::Render("远端连接已换代，旧恢复已取消".into())),
+        }
+    }
+
+    async fn reconcile_server_inner(
         &self,
         target_server_id: &str,
     ) -> Result<Vec<BotId>, BotManagerError> {

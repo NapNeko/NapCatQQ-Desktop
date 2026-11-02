@@ -183,6 +183,10 @@ impl OpenTunnel {
     pub fn local_port(&self) -> u16 {
         self.handle.local_port()
     }
+
+    pub fn is_closed(&self) -> bool {
+        self.handle.is_closed()
+    }
 }
 
 impl Drop for OpenTunnel {

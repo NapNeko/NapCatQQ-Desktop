@@ -8,19 +8,17 @@ use tokio_util::sync::CancellationToken;
 use super::*;
 use crate::events::EventSubscription;
 
-type DebugRecoveryGate = Arc<Mutex<Option<tokio::time::Instant>>>;
-pub(super) type DebugRecoveryGates = Arc<Mutex<HashMap<String, DebugRecoveryGate>>>;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum HostChange {
+pub(crate) enum HostChange {
     Lost,
     Recovered,
 }
 
 struct HostWork {
     change: HostChange,
+    version: (u64, u64),
     cancel: CancellationToken,
-    pending: VecDeque<HostChange>,
+    pending: VecDeque<(HostChange, (u64, u64))>,
 }
 
 fn host_task(
@@ -47,7 +45,18 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         if let Some(tx) = ready {
             let _ = tx.send(());
         }
-        run_host_changes(subscription, move |server_id, change| {
+        let updates = self
+            .server_manager
+            .as_ref()
+            .map(|servers| servers.connection_updates())
+            .or_else(|| {
+                self.host_resolver
+                    .as_ref()
+                    .and_then(|resolver| resolver.connection_updates())
+            });
+        let connections = updates
+            .map(|updates| ncd_server::ConnectionObserver::new(updates).with_recovery_requests());
+        run_host_changes(subscription, connections, move |server_id, change| {
             let manager = self.clone();
             Box::pin(async move {
                 match change {
@@ -76,38 +85,34 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 }
 
-async fn run_host_changes(
+pub(crate) async fn run_host_changes(
     mut subscription: EventSubscription,
+    mut connections: Option<ncd_server::ConnectionObserver>,
     mut handle: impl FnMut(String, HostChange) -> BoxFuture<'static, ()>,
 ) {
     let mut pending: HashMap<String, HostWork> = HashMap::new();
     let mut running: FuturesUnordered<BoxFuture<'static, String>> = FuturesUnordered::new();
     loop {
         tokio::select! {
-            event = subscription.next() => {
-                let (server_id, change) = match event {
-                    Some(DomainEvent::HostConnectionLost { server_id, .. }) => (server_id, HostChange::Lost),
-                    Some(DomainEvent::HostConnectionRecovered { server_id, .. }) => (server_id, HostChange::Recovered),
-                    Some(_) => continue,
-                    None => return,
-                };
+            change = next_host_change(&mut subscription, &mut connections) => {
+                let Some((server_id, change, version)) = change else { return; };
                 if let Some(work) = pending.get_mut(&server_id) {
                     // 已换连接时，不能继续等旧 SSH 命令的超时；清理任务本身仍要按序完成。
-                    if change == HostChange::Lost && work.change == HostChange::Recovered {
+                    if (change == HostChange::Lost || version != work.version) && work.change == HostChange::Recovered {
                         work.cancel.cancel();
                     }
                     let queue = &mut work.pending;
                     // 断线覆盖尚未执行的恢复；之后的恢复仍必须在清理完成后执行。
-                    if change == HostChange::Lost {
+                    if change == HostChange::Lost || version != work.version {
                         queue.clear();
                     }
-                    if queue.back() != Some(&change) {
-                        queue.push_back(change);
+                    if queue.back() != Some(&(change, version)) {
+                        queue.push_back((change, version));
                     }
                 } else {
                     let cancel = CancellationToken::new();
                     pending.insert(server_id.clone(), HostWork {
-                        change, cancel: cancel.clone(), pending: VecDeque::new(),
+                        change, version, cancel: cancel.clone(), pending: VecDeque::new(),
                     });
                     let task = handle(server_id.clone(), change);
                     running.push(host_task(server_id, task, cancel));
@@ -115,8 +120,9 @@ async fn run_host_changes(
             }
             Some(server_id) = running.next(), if !running.is_empty() => {
                 let work = pending.get_mut(&server_id).expect("running host registered");
-                if let Some(change) = work.pending.pop_front() {
+                if let Some((change, version)) = work.pending.pop_front() {
                     work.change = change;
+                    work.version = version;
                     work.cancel = CancellationToken::new();
                     let task = handle(server_id.clone(), change);
                     running.push(host_task(server_id, task, work.cancel.clone()));
@@ -128,10 +134,98 @@ async fn run_host_changes(
     }
 }
 
+async fn next_host_change(
+    events: &mut EventSubscription,
+    connections: &mut Option<ncd_server::ConnectionObserver>,
+) -> Option<(String, HostChange, (u64, u64))> {
+    if let Some(connections) = connections {
+        loop {
+            let (id, snapshot) = connections.next().await?;
+            let version = (snapshot.generation, snapshot.revision);
+            match snapshot.state {
+                ncd_server::ServerState::Connected => {
+                    return Some((id, HostChange::Recovered, version));
+                }
+                ncd_server::ServerState::Disconnected | ncd_server::ServerState::Failed => {
+                    return Some((id, HostChange::Lost, version));
+                }
+                ncd_server::ServerState::Connecting => {}
+            }
+        }
+    }
+    loop {
+        match events.next().await? {
+            DomainEvent::HostConnectionLost { server_id, .. } => {
+                return Some((server_id, HostChange::Lost, (0, 0)));
+            }
+            DomainEvent::HostConnectionRecovered { server_id, .. } => {
+                return Some((server_id, HostChange::Recovered, (0, 0)));
+            }
+            _ => {}
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use tokio::sync::{Semaphore, mpsc};
+
+    #[tokio::test]
+    async fn newer_connected_snapshot_cancels_old_recovery_even_when_lost_was_coalesced() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        struct Held(Arc<AtomicBool>);
+        impl Drop for Held {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::SeqCst);
+            }
+        }
+        let bus = BroadcastEventBus::default();
+        let (states, updates) = tokio::sync::watch::channel(ncd_server::ConnectionSnapshots::new());
+        let released = Arc::new(AtomicBool::new(false));
+        let release = released.clone();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let mut attempt = 0;
+        let task = tokio::spawn(run_host_changes(
+            bus.subscribe(EventFilter::all()),
+            Some(ncd_server::ConnectionObserver::new(updates)),
+            move |id, change| {
+                let current = attempt;
+                attempt += 1;
+                let tx = tx.clone();
+                let released = release.clone();
+                Box::pin(async move {
+                    if current == 0 {
+                        let _held = Held(released);
+                        tx.send((id, change)).unwrap();
+                        std::future::pending::<()>().await;
+                    } else {
+                        assert!(released.load(Ordering::SeqCst));
+                        tx.send((id, change)).unwrap();
+                    }
+                })
+            },
+        ));
+        for generation in [1, 2] {
+            states.send_modify(|states| {
+                states.insert(
+                    "server".into(),
+                    ncd_server::ConnectionSnapshot {
+                        generation,
+                        revision: 0,
+                        recovery_requested: 0,
+                        state: ncd_server::ServerState::Connected,
+                    },
+                );
+            });
+            assert_eq!(
+                next(&mut rx).await,
+                ("server".into(), HostChange::Recovered)
+            );
+        }
+        assert!(released.load(Ordering::SeqCst));
+        task.abort();
+    }
 
     fn publish(bus: &BroadcastEventBus, id: &str, change: HostChange) {
         bus.publish(match change {
@@ -161,7 +255,7 @@ mod tests {
         let gate = Arc::new(Semaphore::new(0));
         let wait = Arc::clone(&gate);
         let (tx, mut rx) = mpsc::unbounded_channel();
-        let task = tokio::spawn(run_host_changes(subscription, move |id, change| {
+        let task = tokio::spawn(run_host_changes(subscription, None, move |id, change| {
             let gate = Arc::clone(&wait);
             let tx = tx.clone();
             Box::pin(async move {
@@ -195,7 +289,7 @@ mod tests {
         let gate = Arc::new(Semaphore::new(0));
         let wait = Arc::clone(&gate);
         let (tx, mut rx) = mpsc::unbounded_channel();
-        let task = tokio::spawn(run_host_changes(subscription, move |id, change| {
+        let task = tokio::spawn(run_host_changes(subscription, None, move |id, change| {
             let gate = Arc::clone(&wait);
             let tx = tx.clone();
             Box::pin(async move {

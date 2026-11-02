@@ -2,7 +2,6 @@
 //! 只读，不改任何 Bot 配置。
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use async_trait::async_trait;
 use ncd_domain::RuntimeScenario;
@@ -10,7 +9,6 @@ use ncd_domain::bot_actor::BotActorSnapshot;
 use ncd_domain::bot_config::{BackendType, BotConfig};
 use ncd_domain::ids::BotId;
 use ncd_traits::{BotConfigRepo, ConfigStore};
-use tokio::sync::Mutex;
 use tracing::warn;
 
 use super::BotManager;
@@ -130,43 +128,19 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> DebugBotPort for BotM
         if snapshot.state != ncd_domain::bot_actor::BotActorState::Running {
             return Err("Bot 没有在运行".into());
         }
-        // Chat 与调试台可同时发现同一主机断线，只接管一轮，失败交回现有 SSH 冷却策略。
-        let gate = {
-            let mut gates = self.debug_recovery.lock().await;
-            Arc::clone(
-                gates
-                    .entry(server_id.clone())
-                    .or_insert_with(|| Arc::new(Mutex::new(None))),
-            )
-        };
-        let Ok(mut recent) = gate.try_lock_owned() else {
+        if let Some(servers) = &self.server_manager {
+            let host = servers.get_live_host(server_id).await?;
+            servers.request_recovery(server_id, &host);
             return Ok(());
-        };
-        let now = tokio::time::Instant::now();
-        if recent.is_some_and(|at| now.duration_since(at) < std::time::Duration::from_secs(5)) {
-            return Ok(());
-        }
-        *recent = Some(now);
-        let manager = self.clone();
-        let server_id = server_id.clone();
-        // 接收器的一次连接有超时；已开始的 SSH 恢复必须能完成，而不能每次都被半途取消。
-        tokio::spawn(async move {
-            let _gate = recent;
-            if let Some(servers) = &manager.server_manager {
-                servers.get_live_host(&server_id).await?;
-            } else if let Some(resolver) = &manager.host_resolver {
-                resolver
-                    .resolve(&config.bot.runtime_target)
-                    .await
-                    .map_err(|e| e.to_string())?;
-            }
-            manager
-                .reconcile_remote_runtimes_for_server(&server_id)
+        } else if let Some(resolver) = &self.host_resolver {
+            resolver
+                .resolve(&config.bot.runtime_target)
                 .await
                 .map_err(|e| e.to_string())?;
-            Ok(())
-        })
-        .await
-        .map_err(|e| e.to_string())?
+        }
+        self.reconcile_remote_runtimes_for_server(server_id)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(())
     }
 }

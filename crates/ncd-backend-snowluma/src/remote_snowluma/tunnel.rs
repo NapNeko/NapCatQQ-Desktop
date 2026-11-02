@@ -63,12 +63,15 @@ impl RemoteSnowLumaTunnelRegistry {
         if !self.is_current(server_id, &slot).await {
             return None;
         }
-        guard.as_ref().map(|b| RemoteSnowLumaTunnelEndpoints {
-            webui_local_port: b.webui.local_port(),
-            novnc_local_port: b.novnc.local_port(),
-            webui_password: b.webui_password.clone(),
-            vnc_password: b.vnc_password.clone(),
-        })
+        guard
+            .as_ref()
+            .filter(|b| !b.webui.is_closed() && !b.novnc.is_closed())
+            .map(|b| RemoteSnowLumaTunnelEndpoints {
+                webui_local_port: b.webui.local_port(),
+                novnc_local_port: b.novnc.local_port(),
+                webui_password: b.webui_password.clone(),
+                vnc_password: b.vnc_password.clone(),
+            })
     }
 
     /// 隧道 +1;首次建立双隧道密码由调用方在 daemon 就绪后从远端 secret 读出传入。
@@ -123,6 +126,8 @@ impl RemoteSnowLumaTunnelRegistry {
                 bundle.remote_novnc_port,
                 remote_novnc_port,
             ) || bundle.remote_webui_host != remote_webui_host
+                || bundle.webui.is_closed()
+                || bundle.novnc.is_closed()
             {
                 tracing::info!(
                     target: "ncd_runtime::remote_snowluma",

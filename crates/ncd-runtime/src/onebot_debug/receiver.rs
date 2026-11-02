@@ -941,15 +941,28 @@ pub(super) async fn run_pump(
     let mut backoff = Backoff::new();
     // 上一条连接关掉的时刻。马上重连成功就不算断线；重连没成功的，漏事件从这一刻算起
     let mut lost_at: Option<u64> = None;
+    let mut recover_remote = false;
     loop {
         if !std::mem::take(&mut announced) {
             receiver.set_state_from(pump_id, DebugReceiverState::Connecting);
         }
         let attempt = async {
-            tokio::time::timeout(
-                CONNECT_TIMEOUT,
-                connect(&manager, &receiver.bot_id, &source, &epoch),
-            )
+            tokio::time::timeout(CONNECT_TIMEOUT, async {
+                if recover_remote && source == DebugChannelId::Internal {
+                    if let Some(manager) = manager.upgrade() {
+                        if let Some(view) = manager.bots.bot(&receiver.bot_id).await {
+                            if view.running() && !view.config.bot.runtime_target.is_local() {
+                                manager
+                                    .bots
+                                    .recover_webui(&receiver.bot_id)
+                                    .await
+                                    .map_err(ConnectFailure::retry)?;
+                            }
+                        }
+                    }
+                }
+                connect(&manager, &receiver.bot_id, &source, &epoch).await
+            })
             .await
             .unwrap_or_else(|_| Err(ConnectFailure::retry("连接超时")))
         };
@@ -960,6 +973,7 @@ pub(super) async fn run_pump(
         };
         match connected {
             Ok(mut conn) => {
+                recover_remote = false;
                 let connected_at = Instant::now();
                 // 连上之后 lost_at 不用清：离开这里的每条路都会重新记它（或者直接退出）
                 receiver.connected(pump_id);
@@ -981,6 +995,7 @@ pub(super) async fn run_pump(
                         continue;
                     }
                     Ended::Lost(reason) => {
+                        recover_remote = true;
                         lost_at = Some(now_ms());
                         debug!(bot_id = %receiver.bot_id, %reason, "调试台：事件连接断开，稍后重连");
                     }
@@ -991,6 +1006,7 @@ pub(super) async fn run_pump(
                 return;
             }
             Err(failure) => {
+                recover_remote = true;
                 debug!(bot_id = %receiver.bot_id, reason = %failure.reason, "调试台：事件来源没连上，稍后重试");
             }
         }

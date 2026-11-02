@@ -111,7 +111,7 @@ pub(crate) async fn open_loopback_tunnel(
     remote_port: u16,
 ) -> Result<TunnelHandle, HostError> {
     timeout(
-        Duration::from_secs(3),
+        Duration::from_secs(15),
         host.open_tunnel(TunnelSpec::local_to_remote(0, remote_port)),
     )
     .await
