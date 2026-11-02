@@ -5,6 +5,7 @@ use bytes::Bytes;
 use serde::Deserialize;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+use super::super::linux::SFTP_READ_BUFFER_BYTES;
 use super::{RemoteWindowsHost, ensure_success, invalid_json, ps_literal};
 use crate::{ArchiveKind, DirEntry, DriveEntry, DriveKind, Host, HostError, HostPath, Os};
 
@@ -22,13 +23,18 @@ impl RemoteWindowsHost {
     pub(super) async fn read(&self, path: &HostPath) -> Result<Bytes, HostError> {
         let remote = self.sftp_path(path)?;
         let session = self.transport.sftp_session().await?;
+        let mut lease = self.transport.sftp_read_lease(&session);
         let file = session.open(remote.as_posix()).await.map_err(|error| {
+            if matches!(&error, russh_sftp::client::error::Error::Status(_)) {
+                lease.complete();
+            }
             super::super::linux::sftp_err_to_host(remote.as_posix(), "read", error)
         })?;
-        let mut data = Vec::new();
+        let mut data = Vec::with_capacity(SFTP_READ_BUFFER_BYTES);
         file.take(64 * 1024 * 1024 + 1)
             .read_to_end(&mut data)
             .await?;
+        lease.complete();
         if data.len() > 64 * 1024 * 1024 {
             return Err(HostError::InvalidArgument {
                 reason: "read_file超过64MiB，请使用download".into(),
@@ -95,7 +101,7 @@ impl RemoteWindowsHost {
     pub(super) async fn get(&self, remote: &HostPath, local: &Path) -> Result<(), HostError> {
         let remote = self.sftp_path(remote)?;
         let session = self.transport.sftp_session().await?;
-        let mut input = session.open(remote.as_posix()).await.map_err(|error| {
+        let input = session.open(remote.as_posix()).await.map_err(|error| {
             super::super::linux::sftp_err_to_host(remote.as_posix(), "download", error)
         })?;
         if let Some(parent) = local
@@ -105,6 +111,7 @@ impl RemoteWindowsHost {
             tokio::fs::create_dir_all(parent).await?;
         }
         let mut output = tokio::fs::File::create(local).await?;
+        let mut input = tokio::io::BufReader::with_capacity(SFTP_READ_BUFFER_BYTES, input);
         tokio::io::copy(&mut input, &mut output).await?;
         output.flush().await?;
         Ok(())

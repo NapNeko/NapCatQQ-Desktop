@@ -165,6 +165,10 @@ impl RemoteWindowsHost {
 
 #[async_trait]
 impl Host for RemoteWindowsHost {
+    fn transport_changes(&self) -> Option<tokio::sync::watch::Receiver<u64>> {
+        self.transport.transport_changes()
+    }
+
     fn os(&self) -> Os {
         Os::Windows
     }

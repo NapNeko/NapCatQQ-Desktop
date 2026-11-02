@@ -89,6 +89,11 @@ pub struct SshDialTarget {
 /// }
 #[async_trait]
 pub trait Host: Send + Sync {
+    /// 转发连接的失效不代表控制连接断开，编排层据此重新取得端点。
+    fn transport_changes(&self) -> Option<tokio::sync::watch::Receiver<u64>> {
+        None
+    }
+
     // ===== 身份信息(实装时探测一次缓存) =====
 
     /// 主机所在 OS

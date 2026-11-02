@@ -66,6 +66,7 @@ pub struct TunnelHandle {
     pub(crate) closed: AtomicBool,
     /// 持有后台任务,Drop 时它会因 shutdown 唤醒退出
     pub(crate) _task: tokio::task::JoinHandle<()>,
+    pub(crate) transport_closed: Option<tokio_util::sync::CancellationToken>,
 }
 
 impl TunnelHandle {
@@ -108,6 +109,7 @@ impl TunnelHandle {
             shutdown,
             closed: AtomicBool::new(false),
             _task: task,
+            transport_closed: None,
         })
     }
 
@@ -124,6 +126,7 @@ impl TunnelHandle {
             _task: tokio::spawn(async move {
                 shutdown_for_task.notified().await;
             }),
+            transport_closed: None,
         }
     }
 
@@ -137,7 +140,12 @@ impl TunnelHandle {
 
     /// 主动关闭立即可见；后台任务退出的隧道也不应继续用于连接计划。
     pub fn is_closed(&self) -> bool {
-        self.closed.load(Ordering::Acquire) || self._task.is_finished()
+        self.closed.load(Ordering::Acquire)
+            || self._task.is_finished()
+            || self
+                .transport_closed
+                .as_ref()
+                .is_some_and(|token| token.is_cancelled())
     }
 
     /// 主动关闭隧道(也可以直接 drop)
@@ -146,6 +154,17 @@ impl TunnelHandle {
         self.shutdown.notify_waiters();
         // 任务可能尚未首次轮询，保留一个通知使稍后注册的等待者也能退出。
         self.shutdown.notify_one();
+    }
+
+    pub async fn close_and_wait(&mut self) {
+        self.close();
+        if tokio::time::timeout(std::time::Duration::from_secs(8), &mut self._task)
+            .await
+            .is_err()
+        {
+            self._task.abort();
+            let _ = (&mut self._task).await;
+        }
     }
 }
 
@@ -225,6 +244,7 @@ mod tests {
             shutdown: Arc::new(Notify::new()),
             closed: AtomicBool::new(false),
             _task: tokio::spawn(async {}),
+            transport_closed: None,
         };
         tokio::time::timeout(std::time::Duration::from_secs(1), async {
             while !handle.is_closed() {

@@ -18,6 +18,9 @@ enum SftpBehavior {
     HoldSubsystem,
     FailFirstRead,
     HoldWriteAcks,
+    ConfigFile,
+    HoldFirstRead,
+    MissingFile,
 }
 
 #[derive(Clone, Copy)]
@@ -37,6 +40,7 @@ struct SessionStats {
     rejected: AtomicUsize,
     executions: AtomicUsize,
     file_reads: AtomicUsize,
+    read_seen: Notify,
     kills: AtomicUsize,
     open_requested: Notify,
     release_open: Notify,
@@ -218,6 +222,10 @@ impl server::Handler for MockSession {
                 let id = &packet[5..9];
                 match packet[4] {
                     3 => {
+                        if matches!(self.behavior, SftpBehavior::MissingFile) {
+                            sftp_status(session, channel, id, 2);
+                            continue;
+                        }
                         let mut body = vec![102];
                         body.extend_from_slice(id);
                         body.extend_from_slice(&7_u32.to_be_bytes());
@@ -226,6 +234,10 @@ impl server::Handler for MockSession {
                     }
                     5 => {
                         let first = self.stats.file_reads.fetch_add(1, Ordering::SeqCst) == 0;
+                        self.stats.read_seen.notify_one();
+                        if matches!(self.behavior, SftpBehavior::HoldFirstRead) && first {
+                            continue;
+                        }
                         if matches!(self.behavior, SftpBehavior::FailFirstRead) && first {
                             sftp_status(session, channel, id, 4);
                             continue;
@@ -235,6 +247,26 @@ impl server::Handler for MockSession {
                         let offset = u64::from_be_bytes(
                             packet[13 + handle_len..21 + handle_len].try_into().unwrap(),
                         );
+                        if matches!(self.behavior, SftpBehavior::ConfigFile) {
+                            let length = u32::from_be_bytes(
+                                packet[21 + handle_len..25 + handle_len].try_into().unwrap(),
+                            ) as usize;
+                            let offset = usize::try_from(offset).unwrap();
+                            let remaining = 56_601_usize.saturating_sub(offset);
+                            if remaining == 0 {
+                                sftp_status(session, channel, id, 1);
+                            } else {
+                                let data: Vec<u8> = (offset..offset + remaining.min(length))
+                                    .map(|index| (index % 251) as u8)
+                                    .collect();
+                                let mut body = vec![103];
+                                body.extend_from_slice(id);
+                                body.extend_from_slice(&(data.len() as u32).to_be_bytes());
+                                body.extend_from_slice(&data);
+                                sftp_packet(session, channel, &body);
+                            }
+                            continue;
+                        }
                         if offset != 0 {
                             sftp_status(session, channel, id, 1);
                         } else {
@@ -255,6 +287,161 @@ impl server::Handler for MockSession {
         }
         Ok(())
     }
+}
+
+#[tokio::test]
+async fn config_file_read_avoids_tiny_sftp_round_trips() {
+    let fixture = MockSsh::connect(SftpBehavior::ConfigFile).await;
+    let sftp = fixture.host.sftp_session().await.unwrap();
+    let mut file = sftp.open("/config.toml").await.unwrap();
+    let mut baseline = Vec::new();
+    file.read_to_end(&mut baseline).await.unwrap();
+    drop(file);
+    let before = fixture.stats.file_reads.swap(0, Ordering::SeqCst);
+
+    let actual = fixture
+        .host
+        .read_file(&HostPath::from_posix("/config.toml"))
+        .await
+        .unwrap();
+    let after = fixture.stats.file_reads.load(Ordering::SeqCst);
+    assert_eq!(actual.as_ref(), baseline.as_slice());
+    assert_eq!(actual.len(), 56_601);
+    assert!(before > 10, "baseline read requests: {before}");
+    assert!(after <= 4, "buffered read requests: {after}");
+    eprintln!("config SFTP read requests: before={before}, after={after}");
+    fixture.close().await;
+}
+
+#[tokio::test]
+#[ignore = "requires NCD_TEST_SSH_* and NCD_TEST_READ_PATH; reads only"]
+async fn live_config_read_compares_buffered_sftp() {
+    let required = |name| std::env::var(name).unwrap_or_else(|_| panic!("set {name}"));
+    let config = ConnectionConfig::new(
+        required("NCD_TEST_SSH_HOST"),
+        required("NCD_TEST_SSH_PORT").parse().unwrap(),
+        SshCredentials::key_file(
+            required("NCD_TEST_SSH_USER"),
+            required("NCD_TEST_SSH_KEY"),
+            None,
+        ),
+        HostKeyPolicy::strict(required("NCD_TEST_SSH_KNOWN_HOSTS")),
+    );
+    let host = RemoteLinuxHost::connect("read-only-probe", config)
+        .await
+        .unwrap();
+    let path = HostPath::from_posix(required("NCD_TEST_READ_PATH"));
+    let sftp = host.sftp_session().await.unwrap();
+    for round in 1..=3 {
+        let started = std::time::Instant::now();
+        assert!(host.exists(&path).await.unwrap());
+        let mut file = sftp.open(path.as_posix()).await.unwrap();
+        let mut baseline = Vec::new();
+        tokio::time::timeout(Duration::from_secs(30), file.read_to_end(&mut baseline))
+            .await
+            .unwrap()
+            .unwrap();
+        drop(file);
+        let before = started.elapsed();
+
+        let started = std::time::Instant::now();
+        assert!(host.exists(&path).await.unwrap());
+        let actual = host.read_file(&path).await.unwrap();
+        let after = started.elapsed();
+        assert_eq!(actual.as_ref(), baseline.as_slice());
+        eprintln!(
+            "read-only config round={round} bytes={} before_ms={} after_ms={}",
+            actual.len(),
+            before.as_millis(),
+            after.as_millis(),
+        );
+    }
+}
+
+#[tokio::test]
+async fn cancelled_file_read_retires_cached_sftp_without_closing_other_users() {
+    let fixture = MockSsh::connect(SftpBehavior::HoldFirstRead).await;
+    let previous = fixture.host.sftp_session().await.unwrap();
+    let host = Arc::clone(&fixture.host);
+    let pending = tokio::spawn(async move {
+        host.read_file(&HostPath::from_posix("/fixture-public"))
+            .await
+    });
+    tokio::time::timeout(Duration::from_secs(2), fixture.stats.read_seen.notified())
+        .await
+        .unwrap();
+    pending.abort();
+    assert!(pending.await.unwrap_err().is_cancelled());
+    let replacement = fixture.host.sftp_session().await.unwrap();
+    assert!(!Arc::ptr_eq(&previous, &replacement));
+    let mut still_readable = previous.open("/fixture-public").await.unwrap();
+    let mut bytes = Vec::new();
+    still_readable.read_to_end(&mut bytes).await.unwrap();
+    assert_eq!(bytes, b"fixture-public\n");
+    assert_eq!(
+        fixture
+            .host
+            .read_file(&HostPath::from_posix("/fixture-public"))
+            .await
+            .unwrap()
+            .as_ref(),
+        b"fixture-public\n",
+    );
+    fixture.exec().await;
+    fixture.close().await;
+}
+
+#[tokio::test]
+async fn cancelled_metadata_retires_cached_sftp() {
+    let fixture = MockSsh::connect(SftpBehavior::HoldMetadata).await;
+    let previous = fixture.host.sftp_session().await.unwrap();
+    let host = Arc::clone(&fixture.host);
+    let pending = tokio::spawn(async move { host.exists(&HostPath::from_posix("/file")).await });
+    tokio::time::timeout(Duration::from_secs(2), fixture.metadata_seen.notified())
+        .await
+        .unwrap();
+    pending.abort();
+    assert!(pending.await.unwrap_err().is_cancelled());
+    let replacement = fixture.host.sftp_session().await.unwrap();
+    assert!(!Arc::ptr_eq(&previous, &replacement));
+    fixture.exec().await;
+    fixture.close().await;
+}
+
+#[tokio::test]
+async fn cancelled_old_read_does_not_retire_a_replacement_session() {
+    let fixture = MockSsh::connect(SftpBehavior::ConfigFile).await;
+    let previous = fixture.host.sftp_session().await.unwrap();
+    let lease = fixture.host.sftp_read_lease(&previous);
+    let replacement = Arc::new(open_sftp(fixture.host.as_ref()).await.unwrap());
+    let mut cached = fixture.host.sftp.lock().await;
+    *cached = Some(Arc::clone(&replacement));
+    drop(lease);
+    drop(cached);
+    tokio::task::yield_now().await;
+    assert!(Arc::ptr_eq(
+        &fixture.host.sftp_session().await.unwrap(),
+        &replacement
+    ));
+    fixture.close().await;
+}
+
+#[tokio::test]
+async fn missing_file_does_not_retire_a_healthy_session() {
+    let fixture = MockSsh::connect(SftpBehavior::MissingFile).await;
+    let previous = fixture.host.sftp_session().await.unwrap();
+    assert!(matches!(
+        fixture
+            .host
+            .read_file(&HostPath::from_posix("/missing"))
+            .await,
+        Err(HostError::PathNotFound { .. }),
+    ));
+    assert!(Arc::ptr_eq(
+        &previous,
+        &fixture.host.sftp_session().await.unwrap()
+    ));
+    fixture.close().await;
 }
 
 struct MockSsh {

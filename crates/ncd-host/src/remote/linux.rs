@@ -16,6 +16,8 @@
 //!   越界由远端 OS 拒绝(权限不足 → HostError::PermissionDenied)
 
 #[cfg(test)]
+mod forwarding_tests;
+#[cfg(test)]
 mod transport_tests;
 
 use std::collections::HashMap;
@@ -32,7 +34,8 @@ use russh::client::{self, Handle as ClientHandle, Handler, Msg};
 use russh::keys::{PublicKeyBase64, key};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{Mutex, Notify, RwLock, Semaphore, SemaphorePermit};
+use tokio::sync::{Mutex, Notify, RwLock, Semaphore, SemaphorePermit, mpsc};
+use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 use crate::command::{CommandOutput, DEFAULT_COMMAND_TIMEOUT, HostCommand, HostProcessWaitPolicy};
@@ -50,13 +53,17 @@ use super::credentials::{SshCredentials, SshKey};
 use super::host_key::{HostKeyCheck, HostKeyPolicy, KnownHostsStore};
 use super::tunnel::{TunnelDirection, TunnelHandle, TunnelSpec};
 
+mod forwarding;
 mod pty;
+mod sftp_read;
+pub(super) use sftp_read::SftpReadLease;
 
 const SFTP_SESSION_TIMEOUT: Duration = Duration::from_secs(10);
 const SFTP_FILE_IO_TIMEOUT: Duration = Duration::from_secs(30);
+pub(super) const SFTP_READ_BUFFER_BYTES: usize = 64 * 1024;
 
 /// `(远端听地址, 远端听口)` → `(本机目标 host, 本机目标口)`
-type RemoteForwardTable = Arc<Mutex<HashMap<(String, u16), (String, u16)>>>;
+type RemoteForwardTable = Arc<Mutex<HashMap<(String, u16), mpsc::Sender<Channel<Msg>>>>>;
 
 /// russh client handler: host key 校验 + `-R` 进来的 forwarded-tcpip
 struct ClientCallback {
@@ -129,7 +136,7 @@ impl Handler for ClientCallback {
         connected_port: u32,
         _originator_address: &str,
         _originator_port: u32,
-        _session: &mut client::Session,
+        session: &mut client::Session,
     ) -> Result<(), Self::Error> {
         let port = connected_port as u16;
         let target = {
@@ -143,33 +150,19 @@ impl Handler for ClientCallback {
                         .find_map(|((_, p), dest)| (*p == port).then(|| dest.clone()))
                 })
         };
-        let Some((local_host, local_port)) = target else {
+        let Some(target) = target else {
             tracing::warn!(
                 target: "ncd_host::tunnel",
                 connected_address,
                 connected_port,
                 "forwarded-tcpip 没有对应的 -R 登记"
             );
+            session.close(channel.id());
             return Ok(());
         };
-        tokio::spawn(async move {
-            let mut local = match TcpStream::connect((local_host.as_str(), local_port)).await {
-                Ok(s) => s,
-                Err(e) => {
-                    tracing::warn!(
-                        target: "ncd_host::tunnel",
-                        local_host,
-                        local_port,
-                        "-R 连本机失败: {e}"
-                    );
-                    return;
-                }
-            };
-            let mut remote = channel.into_stream();
-            if let Err(e) = tokio::io::copy_bidirectional(&mut local, &mut remote).await {
-                tracing::debug!(target: "ncd_host::tunnel", "remote-forward pump finished: {e}");
-            }
-        });
+        if let Err(error) = target.try_send(channel) {
+            session.close(error.into_inner().id());
+        }
         Ok(())
     }
 }
@@ -215,9 +208,20 @@ pub struct RemoteLinuxHost {
     /// `which` 找到过的命令路径。跟着这个连接对象活：换了服务器档案会重建连接，自然作废
     which_found: std::sync::Mutex<HashMap<String, String>>,
     verified_host_key: Arc<std::sync::Mutex<Option<String>>>,
+    closed: CancellationToken,
+    forward_transport: Mutex<Option<Arc<RemoteLinuxHost>>>,
+    transport_changes: tokio::sync::watch::Sender<u64>,
+    failure_reported: std::sync::atomic::AtomicBool,
 }
 
 impl RemoteLinuxHost {
+    pub(super) fn sftp_read_lease(
+        &self,
+        session: &Arc<russh_sftp::client::SftpSession>,
+    ) -> SftpReadLease {
+        SftpReadLease::new(Arc::clone(&self.sftp), Arc::clone(session))
+    }
+
     /// 建立 Linux SSH 连接并缓存实际 CPU 架构。
     pub async fn connect(
         id: impl Into<String>,
@@ -354,6 +358,10 @@ impl RemoteLinuxHost {
             remote_forwards,
             which_found: std::sync::Mutex::new(HashMap::new()),
             verified_host_key,
+            closed: CancellationToken::new(),
+            forward_transport: Mutex::new(None),
+            transport_changes: tokio::sync::watch::channel(0).0,
+            failure_reported: Default::default(),
         })
     }
 
@@ -468,6 +476,14 @@ impl RemoteLinuxHost {
     }
 
     pub(super) async fn open_session_channel(&self) -> Result<Channel<Msg>, HostError> {
+        tokio::time::timeout(Duration::from_secs(5), self.open_session_channel_inner())
+            .await
+            .map_err(|_| HostError::Timeout {
+                operation: "ssh_channel_open",
+            })?
+    }
+
+    async fn open_session_channel_inner(&self) -> Result<Channel<Msg>, HostError> {
         for attempt in 0..3 {
             let result = {
                 let guard = self.handle.read().await;
@@ -662,6 +678,10 @@ fn ssh_dial_target_from_config(config: &ConnectionConfig) -> SshDialTarget {
 
 #[async_trait]
 impl Host for RemoteLinuxHost {
+    fn transport_changes(&self) -> Option<tokio::sync::watch::Receiver<u64>> {
+        Some(self.transport_changes.subscribe())
+    }
+
     // ===== 身份 =====
     fn os(&self) -> Os {
         Os::Linux
@@ -955,18 +975,23 @@ impl Host for RemoteLinuxHost {
     }
 
     async fn invalidate_connection(&self) {
+        self.closed.cancel();
+        if let Some(forward) = self.forward_transport.lock().await.take() {
+            forward.closed.cancel();
+            forward.invalidate_main_handle().await;
+        }
         self.invalidate_main_handle().await;
         self.invalidate_sftp().await;
     }
 
     async fn is_healthy(&self) -> bool {
-        // 不能再 exec `echo ok`：get_live_host / 后台探活每次都会走到这里，
-        // 3s 超时的 exec 会跟正在跑的 SFTP/长命令抢同一把 session 锁。
-        // 超时 drop channel 会让 russh 报 Packet for unknown recipient，
-        // 随后 mark_unhealthy 把还活着的会话毒死，启动就变成 ssh session poisoned。
+        // 只看 transport 的关闭信号；业务可达性由各自请求的期限和结果判定。
+        if self.closed.is_cancelled() {
+            return false;
+        }
         match tokio::time::timeout(Duration::from_millis(200), self.handle.read()).await {
-            Ok(guard) => session_lock_means_healthy(true, guard.is_some()),
-            Err(_) => session_lock_means_healthy(false, false),
+            Ok(guard) => guard.as_ref().is_some_and(|session| !session.is_closed()),
+            Err(_) => true,
         }
     }
 
@@ -975,14 +1000,17 @@ impl Host for RemoteLinuxHost {
     async fn read_file(&self, path: &HostPath) -> Result<Bytes, HostError> {
         let remote = self.to_remote(path);
         let sftp = self.sftp_session().await?;
+        let mut lease = self.sftp_read_lease(&sftp);
         let mut file = match sftp.open(&remote).await {
             Ok(f) => f,
             Err(e) => {
+                lease.complete();
                 let err = self.sftp_failure(&sftp, &remote, "read", e).await;
                 return Err(err);
             }
         };
-        let mut buf = Vec::new();
+        // 空 Vec 会从 32 字节逐次扩容；SFTP 每次 read 都是一次远端往返。
+        let mut buf = Vec::with_capacity(SFTP_READ_BUFFER_BYTES);
         self.sftp_io(
             &sftp,
             SFTP_FILE_IO_TIMEOUT,
@@ -990,6 +1018,7 @@ impl Host for RemoteLinuxHost {
             file.read_to_end(&mut buf),
         )
         .await?;
+        lease.complete();
         Ok(Bytes::from(buf))
     }
 
@@ -1022,13 +1051,16 @@ impl Host for RemoteLinuxHost {
     async fn list_dir(&self, path: &HostPath) -> Result<Vec<DirEntry>, HostError> {
         let remote = self.to_remote(path);
         let sftp = self.sftp_session().await?;
+        let mut lease = self.sftp_read_lease(&sftp);
         let entries = match sftp.read_dir(&remote).await {
             Ok(e) => e,
             Err(e) => {
+                lease.complete();
                 let err = self.sftp_failure(&sftp, &remote, "list", e).await;
                 return Err(err);
             }
         };
+        lease.complete();
         let mut result = Vec::new();
         for entry in entries {
             let name = entry.file_name();
@@ -1122,7 +1154,8 @@ impl Host for RemoteLinuxHost {
     async fn exists(&self, path: &HostPath) -> Result<bool, HostError> {
         let remote = self.to_remote(path);
         let sftp = self.sftp_session().await?;
-        match sftp.metadata(&remote).await {
+        let mut lease = self.sftp_read_lease(&sftp);
+        let result = match sftp.metadata(&remote).await {
             Ok(_) => Ok(true),
             Err(russh_sftp::client::error::Error::Status(s))
                 if s.status_code == russh_sftp::protocol::StatusCode::NoSuchFile =>
@@ -1133,14 +1166,17 @@ impl Host for RemoteLinuxHost {
                 let err = self.sftp_failure(&sftp, &remote, "exists", e).await;
                 Err(err)
             }
-        }
+        };
+        lease.complete();
+        result
     }
 
     async fn file_size(&self, path: &HostPath) -> Result<Option<u64>, HostError> {
         let remote = self.to_remote(path);
         let sftp = self.sftp_session().await?;
+        let mut lease = self.sftp_read_lease(&sftp);
         // SFTP 的 STAT 跟随链接;LSTAT 才是链接本身
-        match sftp.metadata(&remote).await {
+        let result = match sftp.metadata(&remote).await {
             Ok(m) if m.is_dir() => Ok(None),
             Ok(m) => Ok(m.size),
             Err(russh_sftp::client::error::Error::Status(s))
@@ -1152,7 +1188,9 @@ impl Host for RemoteLinuxHost {
                 let err = self.sftp_failure(&sftp, &remote, "file_size", e).await;
                 Err(err)
             }
-        }
+        };
+        lease.complete();
+        result
     }
 
     async fn upload(&self, local: &Path, remote: &HostPath) -> Result<(), HostError> {
@@ -1185,7 +1223,7 @@ impl Host for RemoteLinuxHost {
     async fn download(&self, remote: &HostPath, local: &Path) -> Result<(), HostError> {
         let remote_str = self.to_remote(remote);
         let sftp = self.sftp_session().await?;
-        let mut file = match sftp.open(&remote_str).await {
+        let file = match sftp.open(&remote_str).await {
             Ok(f) => f,
             Err(e) => {
                 let err = self.sftp_failure(&sftp, &remote_str, "download", e).await;
@@ -1200,6 +1238,7 @@ impl Host for RemoteLinuxHost {
         let mut destination = tokio::fs::File::create(local)
             .await
             .map_err(HostError::Io)?;
+        let mut file = tokio::io::BufReader::with_capacity(SFTP_READ_BUFFER_BYTES, file);
         self.sftp_io(&sftp, DEFAULT_COMMAND_TIMEOUT, "sftp_download", async {
             tokio::io::copy(&mut file, &mut destination).await?;
             destination.flush().await
@@ -1377,10 +1416,6 @@ exit "$ncd_sudo_status""#
 
 /// `lock_acquired`: 是否在短超时内拿到 session 锁。
 /// 拿不到锁说明有命令正在用这条 SSH，视为活着；拿到锁则看句柄是否还在。
-fn session_lock_means_healthy(lock_acquired: bool, handle_present: bool) -> bool {
-    if lock_acquired { handle_present } else { true }
-}
-
 /// 密码帧以换行结束，由包装 shell 的 read 消费。
 fn ensure_trailing_newline(pw: &[u8]) -> Vec<u8> {
     if pw.last() == Some(&b'\n') {
@@ -1577,165 +1612,6 @@ impl HostProcess for RemoteHostProcess {
     }
 }
 
-// Tunnel (端口转发, direct-tcpip)
-
-impl RemoteLinuxHost {
-    /// 打开端口转发：`-L` 本机听、`-R` 远端听
-    pub async fn open_tunnel(&self, spec: TunnelSpec) -> Result<TunnelHandle, HostError> {
-        match spec.direction {
-            TunnelDirection::LocalToRemote => self.open_local_to_remote(spec).await,
-            TunnelDirection::RemoteToLocal => self.open_remote_to_local(spec).await,
-        }
-    }
-
-    async fn open_local_to_remote(&self, spec: TunnelSpec) -> Result<TunnelHandle, HostError> {
-        let local_addr = format!("{}:{}", spec.local_host, spec.local_port);
-        let listener = TcpListener::bind(&local_addr)
-            .await
-            .map_err(HostError::Io)?;
-        let actual_port = listener.local_addr().map_err(HostError::Io)?.port();
-
-        let shutdown = Arc::new(Notify::new());
-        let shutdown_for_task = shutdown.clone();
-        let handle = self.handle.clone();
-        let originator = "127.0.0.1".to_string();
-        let remote_host = spec.remote_host.clone();
-        let remote_port = spec.remote_port;
-
-        let task = tokio::spawn(async move {
-            loop {
-                tokio::select! {
-                    _ = shutdown_for_task.notified() => {
-                        tracing::debug!(target: "ncd_host::tunnel", "tunnel shutdown signaled");
-                        break;
-                    }
-                    accept = listener.accept() => {
-                        let (local_stream, peer) = match accept {
-                            Ok(v) => v,
-                            Err(e) => {
-                                tracing::warn!(target: "ncd_host::tunnel", "accept failed: {e}");
-                                continue;
-                            }
-                        };
-                        let h = handle.clone();
-                        let remote_host_for_conn = remote_host.clone();
-                        let originator_for_conn = originator.clone();
-                        tokio::spawn(async move {
-                            // 开 direct-tcpip channel
-                            let channel = {
-                                let session_guard = h.read().await;
-                                let session = match session_guard.as_ref() {
-                                    Some(s) => s,
-                                    None => {
-                                        tracing::warn!(target: "ncd_host::tunnel", "tunnel open skipped: session poisoned");
-                                        return;
-                                    }
-                                };
-                                session
-                                    .channel_open_direct_tcpip(
-                                        remote_host_for_conn.clone(),
-                                        remote_port as u32,
-                                        originator_for_conn,
-                                        peer.port() as u32,
-                                    )
-                                    .await
-                            };
-                            let channel = match channel {
-                                Ok(c) => c,
-                                Err(e) => {
-                                    tracing::warn!(
-                                        target: "ncd_host::tunnel",
-                                        remote_host = %remote_host_for_conn,
-                                        remote_port,
-                                        "open direct-tcpip: {e}"
-                                    );
-                                    return;
-                                }
-                            };
-                            // channel.into_stream() 转成 AsyncRead + AsyncWrite,直接 copy_bidirectional
-                            let mut local_stream = local_stream;
-                            let mut channel_stream = channel.into_stream();
-                            if let Err(e) = tokio::io::copy_bidirectional(&mut local_stream, &mut channel_stream).await {
-                                tracing::debug!(target: "ncd_host::tunnel", "tunnel pump finished: {e}");
-                            }
-                        });
-                    }
-                }
-            }
-        });
-
-        Ok(TunnelHandle {
-            local_port: actual_port,
-            remote_listen_port: 0,
-            shutdown,
-            closed: Default::default(),
-            _task: task,
-        })
-    }
-
-    async fn open_remote_to_local(&self, spec: TunnelSpec) -> Result<TunnelHandle, HostError> {
-        if spec.local_port == 0 {
-            return Err(HostError::InvalidArgument {
-                reason: "remote-forward 本机目标端口无效".into(),
-            });
-        }
-        let requested = spec.remote_port as u32;
-        let replied = {
-            let mut guard = self.handle.write().await;
-            let session = guard.as_mut().ok_or_else(|| HostError::RemoteConnection {
-                reason: "ssh session poisoned".into(),
-            })?;
-            session
-                .tcpip_forward(spec.remote_host.clone(), requested)
-                .await
-                .map_err(|e| HostError::RemoteConnection {
-                    reason: format!("tcpip-forward（检查 sshd AllowTcpForwarding）: {e}"),
-                })?
-        };
-        let remote_listen = if requested == 0 {
-            replied as u16
-        } else {
-            spec.remote_port
-        };
-        if remote_listen == 0 {
-            return Err(HostError::RemoteConnection {
-                reason: "sshd 未分配远端转发端口（检查 AllowTcpForwarding）".into(),
-            });
-        }
-        self.remote_forwards.lock().await.insert(
-            (spec.remote_host.clone(), remote_listen),
-            (spec.local_host.clone(), spec.local_port),
-        );
-
-        let shutdown = Arc::new(Notify::new());
-        let shutdown_for_task = shutdown.clone();
-        let handle = self.handle.clone();
-        let table = self.remote_forwards.clone();
-        let addr = spec.remote_host.clone();
-        let task = tokio::spawn(async move {
-            shutdown_for_task.notified().await;
-            table.lock().await.remove(&(addr.clone(), remote_listen));
-            let guard = handle.read().await;
-            if let Some(session) = guard.as_ref() {
-                if let Err(e) = session
-                    .cancel_tcpip_forward(addr, remote_listen as u32)
-                    .await
-                {
-                    tracing::debug!(target: "ncd_host::tunnel", "cancel tcpip-forward: {e}");
-                }
-            }
-        });
-
-        Ok(TunnelHandle {
-            local_port: spec.local_port,
-            remote_listen_port: remote_listen,
-            shutdown,
-            closed: Default::default(),
-            _task: task,
-        })
-    }
-}
-
 // 单测: sudo 命令拼接是纯逻辑,从 async 方法里抽出来直接断言
 // 真正的 SSH 往返不在这测(需要活的远端),只锁定命令行字符串形状
 
@@ -1904,13 +1780,6 @@ fi
             b"file body"
         );
         assert!(build_elevated_stdin(None, None).is_none());
-    }
-
-    #[test]
-    fn health_busy_session_is_alive() {
-        assert!(session_lock_means_healthy(false, false));
-        assert!(session_lock_means_healthy(true, true));
-        assert!(!session_lock_means_healthy(true, false));
     }
 
     #[test]
