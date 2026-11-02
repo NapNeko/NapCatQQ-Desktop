@@ -8,6 +8,8 @@ import {
     prepareChatHandoff,
 } from './chatStore';
 import { chatDesktopService } from '../../core/services/chat-desktop.service';
+import { inlineImageService } from '../../core/services/inline-image.service';
+import { ingestMessage } from '../../core/domain/chat/model';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 const target: DebugTarget = {
     bot_id: 'bot',
@@ -209,6 +211,50 @@ describe('chat window handoff', () => {
         unlisten();
         await releaseChatAccount(store);
         expect(wire.unsubscribe).toHaveBeenCalledWith('lease');
+    });
+    it('keeps inline images when the workspace remounts while unsubscribe is pending', async () => {
+        const wire = transport();
+        wire.subscribe.mockResolvedValue({
+            subscription_id: 'remount-lease',
+            receiver: { state: { state: 'connected' } },
+        });
+        wire.call.mockRejectedValue(new Error('联系人服务暂时不可用'));
+        let disconnected!: () => void;
+        wire.unsubscribe.mockImplementationOnce(
+            () =>
+                new Promise<void>((resolve) => {
+                    disconnected = resolve;
+                }),
+        );
+        const store = new ChatAccountStore({ ...target, running: true, online: true }, wire);
+        await store.connect();
+        const source = 'base64://' + btoa('remounted image');
+        const reference = inlineImageService.capture(target.bot_id, '99', source);
+        store.getSnapshot().account = ingestMessage(store.getSnapshot().account, {
+            message_type: 'private',
+            user_id: 22,
+            message_id: 42,
+            time: 1,
+            message: [{ type: 'image', data: { file: reference } }],
+        });
+
+        const leaving = releaseChatAccount(store);
+        expect(releaseChatAccount(store)).toBe(leaving);
+        await vi.waitFor(() => expect(wire.unsubscribe).toHaveBeenCalledOnce());
+        const unlisten = store.subscribe(() => {});
+        const returning = store.initialize();
+        expect(wire.subscribe).toHaveBeenCalledOnce();
+        disconnected();
+        await Promise.all([leaving, returning]);
+
+        expect(wire.subscribe).toHaveBeenCalledTimes(2);
+        expect(store.getSnapshot().connection.state).toBe('connected');
+        expect(store.getSnapshot().account.messages[0].segments[0].data.file).toBe(reference);
+        expect(inlineImageService.source(target.bot_id, '99', reference)).toBe(source);
+        expect(chatDesktopService.releaseAccount).not.toHaveBeenCalled();
+        unlisten();
+        await releaseChatAccount(store);
+        expect(inlineImageService.has(target.bot_id, '99', reference)).toBe(false);
     });
     it('does not establish a late connection after leaving during archive restoration', async () => {
         let restore!: (archive: null) => void;

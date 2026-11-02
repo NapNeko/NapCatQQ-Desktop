@@ -3,8 +3,11 @@
 // 连接会被覆盖；这里给用户一个启动前先拉回来的机会。只读不写，合并和保存由前端确认后走
 // 正常的 upsert。
 
-use super::*;
+use ncd_domain::{BotId, RuntimeTarget};
 use ncd_domain::{DeploymentType, ImportedNetworkConfig};
+use ncd_traits::{BotConfigRepo, ConfigStore};
+
+use super::{BotManager, BotManagerError};
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 读远端这个 Bot 当前的 onebot 网络配置。Ok(None) 表示远端没有这份文件。

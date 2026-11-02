@@ -1,7 +1,15 @@
 // 扫码会话及错号恢复；只重启由 Desktop 管理的冷启动 Bot。
-use super::*;
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use ncd_domain::DeploymentType;
+use ncd_domain::{BackendType, BotActorState, BotConfig, BotId, RuntimeScenario};
 use ncd_domain::{SnowLumaQrLoginSnapshot, SnowLumaQrLoginState};
+use ncd_traits::{BotConfigRepo, ConfigStore};
+use tokio::sync::Mutex;
+
+use super::{BotManager, BotManagerError};
+use crate::events::{DomainEvent, EventBus};
 
 pub(super) struct QrRestart {
     pid: u32,

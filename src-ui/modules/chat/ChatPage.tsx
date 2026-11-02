@@ -9,7 +9,7 @@ import {
 } from '../../hooks/chat/chatStore';
 import { useChatDesktop } from '../../hooks/chat/useChatDesktop';
 import { useChatTargets } from '../../hooks/chat/useChatConversations';
-import type { AppRoute } from '../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../core/domain/ui/route';
 import { accountKey } from '../../core/domain/chat/model';
 import type { ChatTrayNavigation } from '../../core/ipc/generated/chat/ChatTrayNavigation';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';

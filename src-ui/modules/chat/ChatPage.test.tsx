@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatAccountStore } from '../../hooks/chat/chatStore';
-import type { Contact } from '../../core/domain/chat/model';
+import type { Contact, Message } from '../../core/domain/chat/model';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 import { ChatPage } from './ChatPage';
 import { setChatPreferences } from './chatPreferences';
@@ -63,7 +63,16 @@ vi.mock('./ChatSearch', () => ({
     ),
 }));
 vi.mock('./files/GroupFilesDialog', () => ({ GroupFilesDialog: () => null }));
-vi.mock('./ChatTimeline', () => ({ NativeTimeline: () => null }));
+const timelineRender = vi.hoisted(() => vi.fn());
+vi.mock('./ChatTimeline', async () => {
+    const { memo } = await import('react');
+    return {
+        NativeTimeline: memo((props: { messages: Message[] }) => {
+            timelineRender(props.messages);
+            return null;
+        }),
+    };
+});
 vi.mock('./ChatComposer', () => ({
     ChatComposer: ({
         inputRef,
@@ -338,4 +347,44 @@ describe('chat conversation shortcuts', () => {
         expect((chosenDraft as HTMLTextAreaElement).selectionStart).toBe(4);
         expect((chosenDraft as HTMLTextAreaElement).selectionEnd).toBe(4);
     });
+});
+
+it('keeps the active timeline props stable when another conversation receives messages', async () => {
+    const message: Message = {
+        key: 'active-message',
+        id: '1',
+        session: friend.key,
+        senderId: friend.id,
+        senderName: friend.name,
+        mine: false,
+        at: 1000,
+        status: 'sent',
+        segments: [{ type: 'text', data: { text: '正在阅读' } }],
+    };
+    store.getSnapshot().account.messages = [message];
+    render(<ChatPage onNavigate={vi.fn()} />);
+    await waitFor(() => expect(timelineRender).toHaveBeenCalled());
+    const before = timelineRender.mock.calls.at(-1)![0];
+    timelineRender.mockClear();
+    act(() => {
+        const account = store.getSnapshot().account;
+        store.getSnapshot().account = {
+            ...account,
+            messages: [
+                ...account.messages,
+                { ...message, key: 'other-message', session: group.key },
+            ],
+            conversations: {
+                ...account.conversations,
+                [group.key]: {
+                    ...account.conversations[group.key],
+                    preview: '另一个群有新消息',
+                    unread: 1,
+                },
+            },
+        };
+        store.draft(group.key, { text: '', attachments: [], reply: null });
+    });
+    expect(timelineRender).not.toHaveBeenCalled();
+    expect(before).toEqual([message]);
 });

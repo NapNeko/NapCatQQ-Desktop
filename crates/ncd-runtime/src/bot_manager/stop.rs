@@ -1,6 +1,14 @@
 // 停止失败必须离开过渡态；只有后端明确确认退出才发布停止完成。
-use super::*;
+use std::time::Duration;
+
 use futures_util::FutureExt;
+use ncd_domain::{BotActorSnapshot, BotActorState, BotConfig, BotId, StopMode};
+use ncd_traits::{BotConfigRepo, ConfigStore};
+use tracing::{error, info, warn};
+
+use super::{BotManager, BotManagerError};
+use crate::bot_actor::BotActorHandle;
+use crate::events::{DomainEvent, EventBus};
 
 const STOP_BUDGET: Duration = Duration::from_secs(30);
 const STOP_CLEANUP_BUDGET: Duration = Duration::from_secs(3);

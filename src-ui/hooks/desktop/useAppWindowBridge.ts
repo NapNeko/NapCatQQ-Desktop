@@ -9,7 +9,7 @@ import { debugWindowService } from '../../core/services/debug-window.service';
 import { windowEventService } from '../../core/services/desktop.service';
 import { markWorkspaceStale } from '../debug/debugWorkspaceStore';
 import { featureTogglesStore } from '../preferences/featureTogglesStore';
-import type { AppRoute } from '../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../core/domain/ui/route';
 
 export interface AppWindowBridgeHandlers {
     /** 当前路由；聊天交接要按「此刻是否在聊天页」决定先卸载聊天页还是原样准备 */

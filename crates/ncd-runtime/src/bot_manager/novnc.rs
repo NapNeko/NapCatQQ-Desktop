@@ -1,5 +1,11 @@
-use super::*;
+use std::time::Duration;
+
+use futures_util::StreamExt;
+use ncd_domain::{BackendType, BotId, RuntimeScenario};
+use ncd_traits::{BotConfigRepo, ConfigStore};
 use tokio_tungstenite::tungstenite::{Message, client::IntoClientRequest};
+
+use super::{BotManager, BotManagerError};
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     pub async fn prepare_snowluma_novnc(

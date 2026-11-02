@@ -32,7 +32,7 @@ import { BotListPageNext } from './list/BotListPage.next';
 import { BotConfigPageNext } from './config/BotConfigPage.next';
 import { BotLogPageNext } from './log/BotLogPage.next';
 import { BotRuntimeMetricsPageNext } from './metrics/BotRuntimeMetricsPage.next';
-import type { AppRoute } from '../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../core/domain/ui/route';
 
 type View = 'list' | 'config' | 'log' | 'metrics';
 

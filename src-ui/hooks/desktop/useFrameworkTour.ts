@@ -14,7 +14,7 @@ import { DEMO_REMOTE_HOST_ID } from '../../core/domain/onboarding/tourIds';
 import type { FrameworkTourRequest } from './frameworkTourHost';
 import { clearComponentsHostBridge, setComponentsHostBridge } from './componentsHostBridge';
 import { clearBotTourBridge, setBotTourBridge, type BotTourConfigTab } from './botTourBridge';
-import type { AppRoute } from '../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../core/domain/ui/route';
 
 type NavigateFn = (route: AppRoute) => void;
 

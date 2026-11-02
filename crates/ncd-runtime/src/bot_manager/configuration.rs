@@ -1,6 +1,19 @@
 //! Bot 配置持久化、派生文件渲染和删除。
 
-use super::*;
+use super::auto_restart;
+use super::helpers::{
+    docker_container_config_changed, is_shared_napcat_json, set_value_at_dot_path,
+};
+use super::{BotManager, BotManagerError, MAX_BOTS};
+use crate::backend_config_renderer::output_paths_for_backend;
+use crate::bot_actor::{BotActorHandle, BotActorSnapshot, BotActorState};
+use crate::events::{DomainEvent, EventBus};
+use ncd_domain::bot_config::{BackendType, BotConfig};
+use ncd_domain::ids::BotId;
+use ncd_domain::kinds::StopMode;
+use ncd_traits::{BotConfigRepo, ConfigStore, JsonTransaction};
+use std::sync::Arc;
+use tracing::{info, warn};
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 启动前检测派生配置文件 drift
@@ -175,7 +188,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         // 2b. 指标节点映射热更新：连接配置可热改，探针按 mtime 重读 nodes.json
         // 本机写 data_root；远端若已缓存 host，同步写 ~/ncd-watch/metrics/<bot>/nodes.json
         if let Some(data_root) = self.store.config_dir().parent() {
-            let prefs = Self::load_metrics_prefs(data_root);
+            let prefs = crate::metrics::BotRuntimeMetricsPrefs::from_data_root(data_root);
             if prefs.enabled {
                 if let Err(err) =
                     crate::metrics::write_nodes_map(data_root, bot_id.as_str(), &config)
@@ -350,7 +363,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     /// 切换框架时先按旧配置确认停止，再按已保存的新配置启动。
-    pub(super) async fn restart_bot_with_backend_switch(
+    async fn restart_bot_with_backend_switch(
         &self,
         bot_id: &BotId,
         previous_config: BotConfig,
@@ -557,5 +570,47 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         });
 
         Ok(())
+    }
+}
+
+impl<S: ConfigStore + 'static> BotManager<crate::LocalBotConfigRepo<S>, S> {
+    pub async fn replace_bot_configs_with<T>(
+        &self,
+        bots: Option<Vec<BotConfig>>,
+        write: impl std::future::Future<Output = Result<T, String>>,
+    ) -> Result<T, String> {
+        let _migration_guard = if bots.is_some() {
+            Some(
+                self.guard_all_protocol_mutation()
+                    .map_err(|e| e.to_string())?,
+            )
+        } else {
+            None
+        };
+        let previous = if bots.is_some() {
+            self.repo.list().await.unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        let result = self.repo.replace_with(bots, write).await?;
+        if !previous.is_empty() {
+            let manager = self.clone();
+            tokio::spawn(async move {
+                let Ok(current) = manager.repo.list().await else {
+                    return;
+                };
+                for config in previous {
+                    if !current.iter().any(|next| {
+                        next.bot.qq_id == config.bot.qq_id
+                            && next.bot.backend_type == config.bot.backend_type
+                            && next.bot.deployment_type == config.bot.deployment_type
+                            && next.bot.runtime_target == config.bot.runtime_target
+                    }) {
+                        manager.remove_snowluma_metrics_registration(&config).await;
+                    }
+                }
+            });
+        }
+        Ok(result)
     }
 }

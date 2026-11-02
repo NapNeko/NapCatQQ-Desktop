@@ -1,11 +1,11 @@
 import {
     inlineImageService,
     isInlineImageReference,
-} from '../../core/services/inline-image.service';
-import { id, record, text, type Account, type Message } from '../../core/domain/chat/model';
-import { errorText } from '../../core/domain/errors';
-import { normalizeMessage, type Segment } from '../../core/domain/debug/segments';
-import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
+} from '../../../core/services/inline-image.service';
+import { id, record, text, type Account, type Message } from '../../../core/domain/chat/model';
+import { errorText } from '../../../core/domain/errors';
+import { normalizeMessage, type Segment } from '../../../core/domain/debug/segments';
+import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
 
 /** 管理内联图片引用及其在传输边界的转换。 */
 export class ChatMediaCodec {

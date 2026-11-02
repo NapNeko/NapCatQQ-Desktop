@@ -1,6 +1,13 @@
-//! 共享 SnowLuma node 的注册生命周期，设置更新不重启其它 Bot。
+//! 运行期指标注册与节点映射同步；设置更新不重启其它 Bot。
 
-use super::*;
+use std::collections::{HashMap, HashSet};
+use std::time::Duration;
+
+use ncd_domain::{BackendType, BotConfig, BotId, RuntimeTarget};
+use ncd_traits::{BotConfigRepo, ConfigStore};
+use tracing::{info, warn};
+
+use super::BotManager;
 use crate::metrics::{
     BotRuntimeMetricsPrefs, remote_snowluma_registry_posix, snowluma_registration_path,
     snowluma_registry_dir, write_local_snowluma_registration, write_remote_snowluma_registration,
@@ -19,7 +26,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .store
             .config_dir()
             .parent()
-            .map(Self::load_metrics_prefs)
+            .map(BotRuntimeMetricsPrefs::from_data_root)
             .unwrap_or_default();
         let id = BotId::new(config.bot.qq_id.to_string());
         let active = self
@@ -205,6 +212,69 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     let _ = host.remove_file(&path).await;
                 }
             }
+        }
+    }
+
+    /// 远端：把最新 nodes.json 写到 ncd-watch metrics 目录（需 host 已连接）
+    pub(super) async fn refresh_remote_metrics_nodes_map(
+        &self,
+        bot_id: &BotId,
+        config: &BotConfig,
+    ) {
+        if config.bot.backend_type == BackendType::SnowLuma
+            && config.bot.deployment_type == ncd_domain::DeploymentType::Native
+        {
+            self.refresh_snowluma_metrics_registration(config).await;
+            return;
+        }
+
+        let Some(server_id) = config.bot.runtime_target.server_id() else {
+            return;
+        };
+        let Some(resolver) = self.host_resolver.as_ref() else {
+            return;
+        };
+        let host = match resolver.resolve(&config.bot.runtime_target).await {
+            Ok(h) => h,
+            Err(err) => {
+                tracing::debug!(
+                    target: "ncd_runtime::bot_manager",
+                    bot_id = %bot_id,
+                    %err,
+                    "metrics remote nodes: host resolve skipped"
+                );
+                return;
+            }
+        };
+        // 与 watch sync 一致：~/ncd-watch/metrics/<bot>/nodes.json
+        let Ok(home) = crate::metrics::probe_remote_home(host.as_ref()).await else {
+            return;
+        };
+        let posix = crate::metrics::remote_metrics_nodes_posix(&home, bot_id.as_str());
+        let path = HostPath::from_posix(posix);
+        if let Some(parent) = path.parent() {
+            let _ = host.create_dir_all(&parent).await;
+        }
+        let nodes = crate::metrics::build_node_map(config);
+        let body = match serde_json::to_vec(&nodes) {
+            Ok(b) => b,
+            Err(_) => return,
+        };
+        if let Err(err) = host.write_file(&path, &body).await {
+            warn!(
+                target: "ncd_runtime::bot_manager",
+                bot_id = %bot_id,
+                server_id,
+                %err,
+                "metrics remote nodes map write failed"
+            );
+        } else {
+            info!(
+                target: "ncd_runtime::bot_manager",
+                bot_id = %bot_id,
+                server_id,
+                "metrics: refreshed remote nodes.json for hot map"
+            );
         }
     }
 }

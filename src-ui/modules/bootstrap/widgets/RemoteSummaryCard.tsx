@@ -6,7 +6,7 @@ import { Card, Badge } from '../../../shared/ui';
 import { MotionIcon } from '../../../shared/ui/motion';
 import type { ServerProfile } from '../../../core/ipc/generated/domain/ServerProfile';
 import { serverDisplayName } from '../../../core/domain/bootstrap/overviewFormat';
-import type { AppRoute } from '../../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../../core/domain/ui/route';
 
 const REMOTE_NAMES_SHOWN = 3;
 

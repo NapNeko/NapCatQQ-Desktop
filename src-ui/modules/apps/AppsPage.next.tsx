@@ -7,7 +7,7 @@ import { AppInstanceListPage, type DetailTabHint } from './list/AppInstanceListP
 import { AppInstancePageNext } from './detail/AppInstancePage.next';
 import { WebUiAccountDialogHost } from './WebUiAccountDialog';
 import { TermsConsentDialogHost } from './TermsConsentDialog';
-import type { AppRoute } from '../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../core/domain/ui/route';
 
 type View = 'list' | 'detail';
 

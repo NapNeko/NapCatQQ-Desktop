@@ -1,8 +1,8 @@
-import type { chatService } from '../../core/services/chat.service';
-import type { chatArchiveService } from '../../core/services/chat-archive.service';
-import type { Account, Contact } from '../../core/domain/chat/model';
-import type { DebugReceiverState } from '../../core/ipc/generated/debug/DebugReceiverState';
-import type { DebugStreamProgress } from '../../core/ipc/generated/debug/DebugStreamProgress';
+import type { chatService } from '../../../core/services/chat.service';
+import type { chatArchiveService } from '../../../core/services/chat-archive.service';
+import type { Account, Contact } from '../../../core/domain/chat/model';
+import type { DebugReceiverState } from '../../../core/ipc/generated/debug/DebugReceiverState';
+import type { DebugStreamProgress } from '../../../core/ipc/generated/debug/DebugStreamProgress';
 
 export interface ChatSnapshot {
     account: Account;

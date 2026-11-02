@@ -6,36 +6,99 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use ncd_domain::bot_config::BackendType;
 use ncd_domain::onebot_debug::{
     DebugCallOrigin, DebugCallRequest, DebugCallResult, DebugChannelId, DebugError,
-    DebugHistoryEntry, DebugHistoryQuery, DebugHistorySummary,
+    DebugHistoryEntry, DebugHistoryPage, DebugHistoryQuery, DebugHistorySummary,
 };
 use uuid::Uuid;
 
 use super::super::params::{cap_record_params, serialized_len};
-use super::{CREDENTIAL_ACTIONS, HISTORY_KEEP, HISTORY_RESPONSE_LIMIT};
+
+/// 历史保留的条数，与 JSONL 压缩策略共享。
+pub(super) const HISTORY_KEEP: usize = 1000;
+/// 单条回包与全部驻留回包的序列化字节上限。
+pub(super) const HISTORY_RESPONSE_LIMIT: usize = 256 * 1024;
+pub(super) const RESPONSE_BUDGET: usize = 32 * 1024 * 1024;
+const HISTORY_PAGE_MAX: u32 = 200;
+
+/// 明文历史不保存登录凭据，包括动作的 `_async` 变体。
+const CREDENTIAL_ACTIONS: [&str; 7] = [
+    "get_cookies",
+    "get_credentials",
+    "get_csrf_token",
+    "get_clientkey",
+    "get_rkey",
+    "nc_get_rkey",
+    "get_rkey_server",
+];
 
 /// 内存里的历史：最新的 1000 条，加上回包全文的预算记账
 pub(super) struct HistoryMem {
     /// 最旧的在前，最新的在后
-    pub(super) entries: VecDeque<MemEntry>,
+    entries: VecDeque<MemEntry>,
     /// 内存里各条 `response` 序列化后的字节数之和
-    pub(super) response_bytes: usize,
+    response_bytes: usize,
     budget: usize,
     /// 已经检查过的前缀不再可能释放回包；每条记录最多检查一次。
     eviction_cursor: usize,
 }
 
-pub(super) struct MemEntry {
-    pub(super) entry: DebugHistoryEntry,
+struct MemEntry {
+    entry: DebugHistoryEntry,
     /// 这条的 `response` 还在内存里时，它序列化后的字节数；被丢掉后为 0
-    pub(super) response_bytes: usize,
+    response_bytes: usize,
     /// 这一行已经写进 `history.jsonl`。没写成的（磁盘出错）只在内存里有，
     /// 丢了回包就再也找不回来，所以不参与预算淘汰
-    pub(super) persisted: bool,
+    persisted: bool,
     /// `response` 已经从内存里丢掉，全文在文件里
-    pub(super) response_on_disk: bool,
+    response_on_disk: bool,
+}
+
+/// 磁盘补读失败时，`NeedsResponse` 携带的摘要仍可供界面展示。
+pub(super) enum HistoryLookup {
+    Complete(DebugHistoryEntry),
+    NeedsResponse(DebugHistoryEntry),
 }
 
 impl HistoryMem {
+    /// 只暴露分页结果，不让调用方依赖队列顺序和预算记账。
+    pub(super) fn page(&self, q: &DebugHistoryQuery) -> DebugHistoryPage {
+        let limit = q.limit.clamp(1, HISTORY_PAGE_MAX) as usize;
+        let offset = q.offset as usize;
+        let needle = q
+            .text
+            .as_deref()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .map(str::to_lowercase);
+
+        let mut total = 0usize;
+        let mut entries = Vec::new();
+        for item in self
+            .entries
+            .iter()
+            .rev()
+            .filter(|m| matches_query(&m.entry, q, needle.as_deref()))
+        {
+            if total >= offset && entries.len() < limit {
+                entries.push(summarize(&item.entry));
+            }
+            total += 1;
+        }
+        DebugHistoryPage {
+            entries,
+            total: u32::try_from(total).unwrap_or(u32::MAX),
+        }
+    }
+
+    pub(super) fn lookup(&self, id: &str) -> Option<HistoryLookup> {
+        let item = self.entries.iter().rev().find(|item| item.entry.id == id)?;
+        let entry = item.entry.clone();
+        Some(if item.response_on_disk {
+            HistoryLookup::NeedsResponse(entry)
+        } else {
+            HistoryLookup::Complete(entry)
+        })
+    }
+
     pub(super) fn new(budget: usize) -> Self {
         Self {
             entries: VecDeque::new(),
@@ -180,11 +243,7 @@ pub(super) fn prepare_entry(entry: &mut DebugHistoryEntry) -> usize {
     }
 }
 
-pub(super) fn matches_query(
-    entry: &DebugHistoryEntry,
-    q: &DebugHistoryQuery,
-    needle: Option<&str>,
-) -> bool {
+fn matches_query(entry: &DebugHistoryEntry, q: &DebugHistoryQuery, needle: Option<&str>) -> bool {
     // 前端清掉筛选框时可能传空串，等同于没有这项条件
     if let Some(action) = q.action.as_deref().filter(|a| !a.is_empty()) {
         if entry.action != action {
@@ -210,7 +269,7 @@ pub(super) fn matches_query(
     }
 }
 
-pub(super) fn summarize(entry: &DebugHistoryEntry) -> DebugHistorySummary {
+fn summarize(entry: &DebugHistoryEntry) -> DebugHistorySummary {
     DebugHistorySummary {
         id: entry.id.clone(),
         at_ms: entry.at_ms,

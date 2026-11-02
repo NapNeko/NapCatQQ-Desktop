@@ -13,7 +13,7 @@ import { Card, Button } from '../../../shared/ui';
 import { MotionIcon } from '../../../shared/ui/motion';
 import type { ComponentType } from 'react';
 import type { LucideProps } from 'lucide-react';
-import type { AppRoute } from '../../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../../core/domain/ui/route';
 import type { BotActorSnapshot } from '../../../core/ipc/types';
 import type { BotConfig } from '../../../core/ipc/generated/domain/BotConfig';
 import { computeBotFleetStats, listActionableBots } from '../../../core/domain/overview/glance';

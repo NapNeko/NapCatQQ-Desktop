@@ -1,4 +1,4 @@
-// 主窗口路由枚举：定义权威在 core/domain，Sidebar re-export 供历史 import 路径兼容。
+// 主窗口路由类型。导航、页面和侧栏直接依赖此定义，彼此不依赖表现组件。
 
 export type AppRoute =
     | 'overview'

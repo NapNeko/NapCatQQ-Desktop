@@ -1,11 +1,42 @@
-//! 工作区上限和收藏夹导入合并；不执行 I/O。
+//! 工作区与收藏夹的加载、导入校验和规范化；写入事务由 DebugStore 协调。
 
 use std::collections::{HashMap, HashSet};
+use std::io::ErrorKind;
+use std::path::Path;
 
-use ncd_domain::onebot_debug::{DebugCollections, DebugWorkspace};
+use ncd_domain::onebot_debug::{DebugCollections, DebugStorageNotice, DebugWorkspace};
+use serde::de::DeserializeOwned;
+use serde_json::Value;
+use tokio::io::AsyncReadExt;
 use uuid::Uuid;
 
-use super::{MAX_CLOSED_TABS, MAX_RECENT_ACTIONS, MAX_TABS};
+use super::files::{notice, quarantine, strip_bom};
+
+pub(super) const WORKSPACE_FILE: &str = "workspace.json";
+pub(super) const COLLECTIONS_FILE: &str = "collections.json";
+/// 手改文件或前端异常也不能无限增大工作区。
+pub(super) const MAX_TABS: usize = 50;
+const MAX_CLOSED_TABS: usize = 10;
+const MAX_RECENT_ACTIONS: usize = 20;
+/// 收藏夹导入与 MCP 配置冷读取均限制为 16 MiB。
+const IMPORT_MAX_BYTES: u64 = 16 * 1024 * 1024;
+
+pub(super) async fn load_config(
+    dir: &Path,
+    notices: &mut Vec<DebugStorageNotice>,
+) -> (DebugWorkspace, DebugCollections) {
+    let workspace = load_json_or_default(dir, WORKSPACE_FILE, notices).await;
+    let collections = load_json_or_default(dir, COLLECTIONS_FILE, notices).await;
+    (normalize_workspace(workspace), collections)
+}
+
+pub(super) async fn load_config_read_only(
+    dir: &Path,
+) -> Result<(DebugWorkspace, DebugCollections), String> {
+    let workspace = read_json_read_only(&dir.join(WORKSPACE_FILE)).await?;
+    let collections = read_json_read_only(&dir.join(COLLECTIONS_FILE)).await?;
+    Ok((normalize_workspace(workspace), collections))
+}
 
 /// 把工作区收进上限内。约定（与前端 store 一致）：
 /// `tabs` 老的在前；`closed_tabs`、`recent_actions` 新的在前，所以后两个截尾、`tabs` 从头丢
@@ -90,4 +121,87 @@ pub(super) fn merge_collections(
         base.requests.push(request);
     }
     base
+}
+
+/// 导入前完成文件与结构校验；无效输入不修改当前收藏夹或用户的文件。
+pub(super) async fn read_collection_import(path: &Path) -> Result<DebugCollections, String> {
+    let meta = tokio::fs::metadata(path)
+        .await
+        .map_err(|e| format!("读取导入文件失败: {e}"))?;
+    if meta.len() > IMPORT_MAX_BYTES {
+        return Err(format!(
+            "导入文件太大（{} MB），收藏夹文件不会超过 16 MB",
+            meta.len() / (1024 * 1024)
+        ));
+    }
+    let bytes = tokio::fs::read(path)
+        .await
+        .map_err(|e| format!("读取导入文件失败: {e}"))?;
+    let bytes = strip_bom(&bytes);
+
+    // `DebugCollections` 的字段都有默认值，任何 JSON 对象（比如选成了 workspace.json）
+    // 都能解析成一份空收藏夹，导入会「成功」却什么都没导。先确认长得像收藏夹
+    let raw: Value =
+        serde_json::from_slice(bytes).map_err(|e| format!("导入文件不是有效的 JSON: {e}"))?;
+    let looks_like_collections = raw
+        .as_object()
+        .is_some_and(|o| o.contains_key("folders") || o.contains_key("requests"));
+    if !looks_like_collections {
+        return Err("导入文件不是收藏夹导出文件（缺少 folders / requests）".to_owned());
+    }
+    serde_json::from_value(raw).map_err(|e| format!("导入文件的收藏夹结构不对: {e}"))
+}
+
+enum Loaded<T> {
+    Missing,
+    Parsed(T),
+    /// 文件在，但读不出来或解析失败；里面是原因
+    Broken(String),
+}
+
+async fn read_json_read_only<T: DeserializeOwned + Default>(path: &Path) -> Result<T, String> {
+    let file = match tokio::fs::File::open(path).await {
+        Ok(file) => file,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(T::default()),
+        Err(_) => return Err("无法只读加载调试台配置".to_owned()),
+    };
+    let mut bytes = Vec::new();
+    file.take(IMPORT_MAX_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .await
+        .map_err(|_| "无法只读加载调试台配置".to_owned())?;
+    if bytes.len() as u64 > IMPORT_MAX_BYTES {
+        return Err("调试台配置超过只读加载大小限制".to_owned());
+    }
+    serde_json::from_slice(strip_bom(&bytes))
+        .map_err(|_| "调试台配置损坏，请在桌面调试台处理".to_owned())
+}
+
+async fn read_json<T: DeserializeOwned>(path: &Path) -> Loaded<T> {
+    let bytes = match tokio::fs::read(path).await {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == ErrorKind::NotFound => return Loaded::Missing,
+        Err(e) => return Loaded::Broken(format!("读取失败: {e}")),
+    };
+    match serde_json::from_slice(strip_bom(&bytes)) {
+        Ok(value) => Loaded::Parsed(value),
+        Err(e) => Loaded::Broken(e.to_string()),
+    }
+}
+
+async fn load_json_or_default<T: DeserializeOwned + Default>(
+    dir: &Path,
+    file: &str,
+    notices: &mut Vec<DebugStorageNotice>,
+) -> T {
+    let path = dir.join(file);
+    match read_json(&path).await {
+        Loaded::Missing => T::default(),
+        Loaded::Parsed(value) => value,
+        Loaded::Broken(reason) => {
+            let moved = quarantine(&path).await;
+            notices.push(notice(file, moved, reason));
+            T::default()
+        }
+    }
 }

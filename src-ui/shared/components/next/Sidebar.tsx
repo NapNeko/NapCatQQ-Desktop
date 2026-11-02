@@ -29,7 +29,6 @@ import { useMotion } from '../../../hooks/preferences/useMotion';
 import logoSidebar from '../../../assets/logo-32.png?inline';
 import logoSidebarCollapsed from '../../../assets/logo-48.png?inline';
 
-export type { AppRoute } from '../../../core/domain/ui/route';
 import type { AppRoute } from '../../../core/domain/ui/route';
 import type { SidebarStyle } from '../../../core/domain/settings/appPreferences';
 

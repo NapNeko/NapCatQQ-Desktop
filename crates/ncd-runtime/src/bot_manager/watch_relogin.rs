@@ -1,7 +1,10 @@
 // 为 watch 提供远端主机本身可用的登录端点。
-use super::*;
-use crate::onebot_debug::DebugBotPort;
+use ncd_domain::{BackendType, BotConfig, BotId};
+use ncd_traits::{BotConfigRepo, ConfigStore};
 use ncd_watch::relogin_config::WatchLoginTarget;
+
+use super::BotManager;
+use crate::onebot_debug::DebugBotPort;
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     pub async fn confirm_watch_relogin(

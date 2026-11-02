@@ -6,7 +6,7 @@
 // 选中且在跑的 Bot 自动开始收事件、命令面板开关、标签页快捷键。
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { AppRoute } from '../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../core/domain/ui/route';
 import {
     debugWorkspaceStore,
     flushWorkspace,

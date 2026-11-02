@@ -11,11 +11,35 @@ use tokio::io::{
 
 use super::super::params::serialized_len;
 use super::files::{commit_tmp, create_tmp, discard_tmp, notice, quarantine, strip_bom};
-use super::history::HistoryMem;
-use super::{
-    HISTORY_COMPACT_AT, HISTORY_FILE, HISTORY_KEEP, READ_ONLY_HISTORY_LINE_LIMIT,
-    READ_ONLY_HISTORY_RETAINED_LIMIT, READ_ONLY_HISTORY_SCAN_LIMIT,
-};
+use super::history::{HISTORY_KEEP, HistoryMem};
+
+pub(super) const HISTORY_FILE: &str = "history.jsonl";
+/// 留出追加余量；失败退避也由文件保留策略定义。
+pub(super) const HISTORY_COMPACT_AT: usize = 1200;
+pub(super) const COMPACT_BACKOFF: usize = 200;
+const READ_ONLY_RESPONSE_BUDGET: usize = 1024 * 1024;
+pub(super) const READ_ONLY_HISTORY_LINE_LIMIT: u64 = 1024 * 1024;
+pub(super) const READ_ONLY_HISTORY_SCAN_LIMIT: u64 = 32 * 1024 * 1024;
+pub(super) const READ_ONLY_HISTORY_RETAINED_LIMIT: usize = 8 * 1024 * 1024;
+
+/// MCP 冷读取只验证内容与资源限制，不隔离、修复或压缩 GUI 文件。
+pub(super) async fn load_history_read_only(dir: &Path) -> Result<(HistoryMem, usize), String> {
+    match tokio::fs::File::open(dir.join(HISTORY_FILE)).await {
+        Ok(file) => {
+            let scan = scan_history_bounded(file, READ_ONLY_RESPONSE_BUDGET, true)
+                .await
+                .map_err(|_| "无法只读加载调用历史".to_owned())?;
+            if scan.bad > 0 {
+                return Err("调用历史含损坏记录，请在桌面调试台处理".to_owned());
+            }
+            Ok((scan.mem, scan.lines))
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            Ok((HistoryMem::new(READ_ONLY_RESPONSE_BUDGET), 0))
+        }
+        Err(_) => Err("无法只读加载调用历史".to_owned()),
+    }
+}
 
 /// 去掉行尾的 `\n` / `\r\n`（和行首可能有的 BOM）
 fn trim_line(buf: &[u8]) -> &[u8] {
@@ -94,11 +118,11 @@ async fn unreadable_history(
     (HistoryMem::new(budget), 0)
 }
 
-pub(super) struct HistoryScan {
-    pub(super) mem: HistoryMem,
+struct HistoryScan {
+    mem: HistoryMem,
     /// 非空行总数（含读不出来的）
-    pub(super) lines: usize,
-    pub(super) bad: usize,
+    lines: usize,
+    bad: usize,
     /// 第一处坏行的物理行号（从 1 数）和原因，给提示用
     first_bad_line: usize,
     first_error: String,
@@ -112,7 +136,7 @@ async fn scan_history(file: tokio::fs::File, budget: usize) -> std::io::Result<H
     scan_history_bounded(file, budget, false).await
 }
 
-pub(super) async fn scan_history_bounded(
+async fn scan_history_bounded(
     file: tokio::fs::File,
     budget: usize,
     read_only: bool,
@@ -259,7 +283,14 @@ pub(super) async fn read_history_entry(path: &Path, id: &str) -> Option<DebugHis
 // 按行复制
 // ---------------------------------------------------------------------------
 
-pub(super) async fn count_lines(path: &Path) -> Result<usize, String> {
+/// 只复制磁盘上的最新记录，避免把已从内存淘汰的回包一起丢掉。
+pub(super) async fn compact_history(path: &Path) -> Result<usize, String> {
+    let total = count_lines(path).await?;
+    let skip = total.saturating_sub(HISTORY_KEEP);
+    rewrite_lines(path, path, |ordinal| ordinal >= skip).await
+}
+
+async fn count_lines(path: &Path) -> Result<usize, String> {
     let file = tokio::fs::File::open(path)
         .await
         .map_err(|e| format!("打开 {} 失败: {e}", path.display()))?;
@@ -284,7 +315,7 @@ pub(super) async fn count_lines(path: &Path) -> Result<usize, String> {
 /// 把 `src` 里「非空行序号」满足 `keep` 的行按原样复制进临时文件，再原子换成 `dst`
 /// （`src` 和 `dst` 可以是同一个文件）。返回复制了几行。
 /// 逐行读写，内存里只有一行，被内存预算丢掉的回包不会因此丢失
-pub(super) async fn rewrite_lines(
+async fn rewrite_lines(
     src: &Path,
     dst: &Path,
     keep: impl Fn(usize) -> bool,

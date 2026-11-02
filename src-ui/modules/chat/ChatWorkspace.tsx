@@ -15,7 +15,7 @@ import { accountKey, type Contact, type Message } from '../../core/domain/chat/m
 import { conversationRows, groupBoxSummary } from '../../core/domain/chat/groupBox';
 import { chatConnectionLabel } from '../../core/domain/chat/connectionLabel';
 import { latestFileMessageKey } from '../../core/domain/chat/fileMessageSignal';
-import type { AppRoute } from '../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../core/domain/ui/route';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 import type { ChatTrayNavigation } from '../../core/ipc/generated/chat/ChatTrayNavigation';
 import { cssEase } from '../../core/design/cssEase';
@@ -28,7 +28,11 @@ import { useConversationNavigation } from './ConversationList';
 import { ChatListPane } from './ChatListPane';
 import { ChatConversationPane } from './ChatConversationPane';
 import { ChatSearchDialog } from './ChatSearchDialog';
-import { selectWorkspace, equalWorkspace } from './chatViewSelectors';
+import {
+    selectWorkspace,
+    equalWorkspace,
+    createConversationMessagesSelector,
+} from './chatViewSelectors';
 import {
     conversationSwitchDirection,
     useConversationTransition,
@@ -115,10 +119,11 @@ export function ChatWorkspace({
         '.native-chat-conversations, .native-chat-list-empty',
     );
     const switchConversation = useConversationTransition(workspace, account.active);
-    const messages = useMemo(
-        () => account.messages.filter((m) => m.session === account.active),
-        [account.messages, account.active],
+    const selectMessages = useMemo(
+        () => createConversationMessagesSelector(account.active),
+        [account.active],
     );
+    const messages = useChatSelector(store, selectMessages);
     useEffect(() => {
         void store.initialize();
     }, [store, target.running, target.online]);
@@ -193,7 +198,9 @@ export function ChatWorkspace({
     // 其余情况传 null 复现原 effect 的整单 clear；依赖覆盖 identity/active.key/connected/backend。
     useChatGroupSelf(target, connected && active?.type === 'group' ? active.id : null, connected);
     const connectionLabel = chatConnectionLabel(target, snapshot.connection.state);
-    const open = (contact: Contact) => {
+    // 导航动作读取最近一次工作区状态，避免会话列表更新让头像操作和整条时间线失去 memo。
+    const openCurrent = useRef<(contact: Contact) => void>(() => {});
+    openCurrent.current = (contact: Contact) => {
         if (contact.type === 'group' && hidden.has(contact.key))
             void notifications.mute(contact.id, false, true);
         setConversationHidden(identity, contact.key, false);
@@ -209,6 +216,7 @@ export function ChatWorkspace({
             conversationSwitchDirection(rows, account.active, contact.key),
         );
     };
+    const open = useCallback((contact: Contact) => openCurrent.current(contact), []);
     const hide = (contact: Contact) => {
         if (contact.type === 'group') void notifications.mute(contact.id, true, true);
         setConversationHidden(identity, contact.key, true);
@@ -226,11 +234,11 @@ export function ChatWorkspace({
             }),
         [],
     );
-    const showMembers = (memberId?: string) => {
+    const showMembers = useCallback((memberId?: string) => {
         setMemberFocus(memberId);
         setMembersOpen(true);
         setDetailsOpen(false);
-    };
+    }, []);
     const handledNavigation = useRef<ChatTrayNavigation | null>(null);
     useEffect(() => {
         if (

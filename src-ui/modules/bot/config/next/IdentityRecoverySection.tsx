@@ -2,7 +2,7 @@ import { FormSection, Switch, TextField } from '../../../../shared/ui';
 import { ExpandPresence } from '../../../../shared/ui/motion/ExpandPresence';
 import type { AutoRestartSchedule } from '../../../../core/ipc/generated/domain/AutoRestartSchedule';
 import { AutoRestartScheduleEditor } from './AutoRestartScheduleEditor';
-import type { IdentityTabProps } from './IdentityTab';
+import type { IdentityTabProps } from './identityConfig';
 
 export function IdentityRecoverySection({
     data,

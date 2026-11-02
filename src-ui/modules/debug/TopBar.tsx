@@ -12,7 +12,7 @@ import { flushWorkspace } from '../../hooks/debug/debugWorkspaceStore';
 import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
 import { errorText } from '../../core/domain/errors';
 import { isDebugPopoutWindow, useDebugWindow } from '../../hooks/desktop/useDebugWindow';
-import type { AppRoute } from '../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../core/domain/ui/route';
 import type { DebugChannelChoice } from '../../core/ipc/generated/debug/DebugChannelChoice';
 import type { DebugChannels } from '../../core/ipc/generated/debug/DebugChannels';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';

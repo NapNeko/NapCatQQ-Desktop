@@ -15,7 +15,7 @@ import { Bot, Check, ChevronDown, Package, RefreshCw, type LucideIcon } from 'lu
 import { cn } from '../../shared/utils/cn';
 import { Button, Popover, PopoverContent, PopoverTrigger, Spinner } from '../../shared/ui';
 import { Shimmer, StatusDot, type StatusDotTone } from '../../shared/ui/motion';
-import type { AppRoute } from '../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../core/domain/ui/route';
 import { useMotion } from '../../hooks/preferences/useMotion';
 import { useTestChannel } from '../../hooks/debug/useDebugChannels';
 import { channelIdKey } from '../../hooks/debug/keys';

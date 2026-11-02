@@ -12,7 +12,7 @@ import { errorText } from '../../core/domain/errors';
 import { chatScreenshotService } from '../../core/services/chat-screenshot.service';
 import { isLocalFileToken, LOCAL_FILE_PREFIX } from '../../core/domain/debug/streamActions';
 import { dismissInfoBar, pushInfoBar } from '../ui/globalInfoBarStore';
-import type { ChatAccountStore } from './chatStore';
+import type { ChatAccountStore } from './store/ChatAccountStore';
 import { isTauri } from '../../core/domain/runtime/env';
 import type { ChatScreenshotAttachment } from '../../core/ipc/generated/chat/ChatScreenshotAttachment';
 import type { ChatScreenshotShortcutEvent } from '../../core/ipc/generated/chat/ChatScreenshotShortcutEvent';

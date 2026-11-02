@@ -1,7 +1,16 @@
 // BotManager 长任务监听：SnowLuma UI 镜像、进程退出、NapCat login poller。
 // 与 mod.rs 同 impl 块拆分，避免编排主路径与事件环搅在一起。
 
-use super::*;
+use std::sync::Arc;
+use std::time::Duration;
+
+use ncd_domain::{BackendType, BotActorSnapshot, BotActorState, BotId};
+use ncd_traits::{BotConfigRepo, ConfigStore};
+
+use super::BotManager;
+use crate::events::{DomainEvent, DomainEventKind, EventBus, EventFilter};
+use crate::napcat::endpoint_table::NapCatEndpoint;
+use crate::napcat::login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     // ready: subscribe 完成后立刻 signal；bootstrap 须等它再 reconcile attach

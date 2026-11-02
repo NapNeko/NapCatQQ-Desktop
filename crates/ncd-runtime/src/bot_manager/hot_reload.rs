@@ -1,6 +1,12 @@
 //! 运行中 NapCat 与 SnowLuma 的配置热更新。
 
-use super::*;
+use super::BotManager;
+use crate::napcat::endpoint_table::NapCatEndpoint;
+use crate::snowluma::{ReqwestSnowLumaWebUiClient, SnowLumaWebUiClient};
+use ncd_domain::DeploymentType;
+use ncd_domain::bot_config::{BackendType, BotConfig};
+use ncd_domain::ids::BotId;
+use ncd_traits::{BotConfigRepo, ConfigStore};
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 把一份 OneBot 配置 payload 通过 SnowLuma WebUI 热推送给运行中的 bot。

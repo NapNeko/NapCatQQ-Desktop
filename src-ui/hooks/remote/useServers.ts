@@ -2,9 +2,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { serverService } from '../../core/services/server.service';
 
-export function useServers() {
+export function useServers(options?: { refetchOnMount?: boolean }) {
     return useQuery({
         queryKey: ['servers'],
         queryFn: () => serverService.list(),
+        refetchOnMount: options?.refetchOnMount,
     });
 }

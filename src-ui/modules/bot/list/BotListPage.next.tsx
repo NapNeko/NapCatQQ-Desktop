@@ -30,7 +30,7 @@ import { ImportRemoteBotsDialog } from '../dialogs/ImportRemoteBotsDialog';
 import { SnowLumaConsentDialog } from '../dialogs/SnowLumaConsentDialog';
 import { requestDesktopConsent } from '../../../hooks/desktop/desktopConsentHost';
 import { SystemQqWarningDialog } from '../dialogs/SystemQqWarningDialog';
-import type { AppRoute } from '../../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../../core/domain/ui/route';
 
 interface BotListPageNextProps {
     onConfigureBot: (botId: string | null) => void;

@@ -11,7 +11,7 @@ import {
     type EnterFn,
     type ExitFn,
 } from '../../../shared/ui/motion';
-import type { AppRoute } from '../../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../../core/domain/ui/route';
 import { debugWorkspaceStore } from '../../../hooks/debug/debugWorkspaceStore';
 import {
     LEFT_RAIL_WIDTH,

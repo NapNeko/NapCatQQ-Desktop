@@ -1,43 +1,41 @@
+//! Bot 生命周期编排入口与共享依赖装配。
+//!
+//! `start` / `stop` / `shutdown` 负责状态迁移与运行资源，`configuration` 负责持久化，
+//! `bootstrap` / `refresh` / `host_recovery` 负责恢复与对账，`queries` 仅提供查询。
+//! 子模块显式声明依赖，不借入口导入内部实现细节。`local_metrics` 是独立的
+//! 文件准备服务，`metrics` 负责运行期注册与同步，二者不持有彼此的编排状态。
+
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::Duration;
 
 use async_trait::async_trait;
 use futures_util::stream::{FuturesUnordered, StreamExt};
 use tokio::sync::{Mutex, RwLock};
-use tracing::{error, info, warn};
 
-use crate::backend_config_renderer::output_paths_for_backend;
-use crate::bootstrap_reconcile::BootstrapReconciler;
 use crate::bot_actor::{BotActorError, BotActorHandle, BotActorSnapshot, BotActorState};
 use crate::docker_bot_session::DockerBotSessionRegistry;
-// EventBus trait 必须 in scope 才能 publish；DomainEventKind/EventFilter 供 listeners 经 super::* 使用。
-use crate::events::{BroadcastEventBus, DomainEvent, DomainEventKind, EventBus, EventFilter};
-use crate::napcat::endpoint_table::{NapCatEndpoint, NapCatEndpointTable};
-// PollerConfig/PollerDeps 仅 listeners 建 poller 用；RestartHandle 在本文件 impl。
+use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
 use crate::launch::router::DockerQrLoginLocks;
-use crate::napcat::login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
+use crate::napcat::endpoint_table::NapCatEndpointTable;
+use crate::napcat::login_poller::{NapCatLoginPoller, RestartHandle};
 use crate::napcat::offline_notifier::OfflineNotifier;
 use crate::napcat::webui_client::NapCatWebUiClient;
 use crate::remote_bot_log_follow::RemoteBotLogFollowRegistry;
 use crate::remote_runtime_sessions::RemoteRuntimeSessions;
 use crate::runtime_launch_plan::{RuntimeLaunchPlanError, RuntimeLaunchPlanner};
 use crate::runtime_router::{DockerSecretProvider, RuntimeBackendRouter, RuntimeRouterError};
-// SnowLumaWebUiClient: WebUI 配置热更新的 trait 方法解析需要 in scope。
-use crate::snowluma::{AgreementsPayload, ReqwestSnowLumaWebUiClient, SnowLumaWebUiClient};
 use crate::snowluma_agreements::SnowLumaAgreementService;
 use ncd_backend_napcat::remote_native_napcat_session::RemoteNativeNapcatSessionRegistry;
 use ncd_backend_snowluma::remote_snowluma::RemoteSnowLumaDaemon;
 use ncd_backend_snowluma::remote_snowluma_log::RemoteSnowLumaLogRegistry;
 use ncd_backend_snowluma::remote_snowluma_tunnel::RemoteSnowLumaTunnelRegistry;
+use ncd_domain::DesktopNotifySettings;
 use ncd_domain::app_config::WebUiPollerSettings;
-use ncd_domain::bot_config::{BackendType, BotConfig, BotConfigError};
+use ncd_domain::bot_config::{BotConfig, BotConfigError};
 use ncd_domain::ids::BotId;
-use ncd_domain::kinds::{RuntimeTarget, StopMode};
-use ncd_domain::{DeploymentType, DesktopNotifySettings, RuntimeScenario};
 use ncd_traits::backend_config_renderer::BackendConfigRenderer;
-use ncd_traits::runtime_backend::{BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx};
-use ncd_traits::{BotConfigRepo, ConfigStore, JsonTransaction, SecretStore};
+use ncd_traits::runtime_backend::{BotBackend, BotBackendError};
+use ncd_traits::{BotConfigRepo, ConfigStore, SecretStore};
 
 pub mod auto_restart;
 mod bootstrap;
@@ -47,8 +45,8 @@ mod helpers;
 pub(crate) mod host_recovery;
 mod hot_reload;
 mod listeners;
+mod local_metrics;
 mod metrics;
-mod metrics_inject;
 mod migration;
 mod novnc;
 mod qr_login;
@@ -62,7 +60,6 @@ mod start;
 mod stop;
 mod watch_relogin;
 mod webui;
-use helpers::{docker_container_config_changed, is_shared_napcat_json, set_value_at_dot_path};
 pub(crate) use migration::migration_protocol_scope;
 pub use runtime_gate::{RuntimeReadinessGate, describe_not_ready, framework_component_for};
 
@@ -290,48 +287,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
     }
 }
 
-impl<S: ConfigStore + 'static> BotManager<crate::LocalBotConfigRepo<S>, S> {
-    pub async fn replace_bot_configs_with<T>(
-        &self,
-        bots: Option<Vec<BotConfig>>,
-        write: impl std::future::Future<Output = Result<T, String>>,
-    ) -> Result<T, String> {
-        let _migration_guard = if bots.is_some() {
-            Some(
-                self.guard_all_protocol_mutation()
-                    .map_err(|e| e.to_string())?,
-            )
-        } else {
-            None
-        };
-        let previous = if bots.is_some() {
-            self.repo.list().await.unwrap_or_default()
-        } else {
-            Vec::new()
-        };
-        let result = self.repo.replace_with(bots, write).await?;
-        if !previous.is_empty() {
-            let manager = self.clone();
-            tokio::spawn(async move {
-                let Ok(current) = manager.repo.list().await else {
-                    return;
-                };
-                for config in previous {
-                    if !current.iter().any(|next| {
-                        next.bot.qq_id == config.bot.qq_id
-                            && next.bot.backend_type == config.bot.backend_type
-                            && next.bot.deployment_type == config.bot.deployment_type
-                            && next.bot.runtime_target == config.bot.runtime_target
-                    }) {
-                        manager.remove_snowluma_metrics_registration(&config).await;
-                    }
-                }
-            });
-        }
-        Ok(result)
-    }
-}
-
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -487,7 +442,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         if let Some(data_root) = self.store.config_dir().parent() {
             router = router
                 .with_snowluma_data_root(crate::DataPaths::new(data_root).snowluma_data_dir());
-            let prefs = Self::load_metrics_prefs(data_root);
+            let prefs = crate::metrics::BotRuntimeMetricsPrefs::from_data_root(data_root);
             // SL 即使统计关闭也预加载共享探针，后续设置通过注册表热更新。
             router = router.with_remote_metrics_injector(Arc::new(
                 crate::metrics::RuntimeRemoteMetricsInjector::new(data_root.to_path_buf()),
@@ -621,6 +576,23 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         Ok(result)
     }
 
+    /// 单测 / 集成测试:把 Actor 标为 Running,不经过 backend start
+    #[doc(hidden)]
+    pub async fn test_confirm_actor_running(
+        &self,
+        bot_id: &BotId,
+    ) -> Result<BotActorSnapshot, BotManagerError> {
+        let handle = self.get_actor(bot_id).await?;
+        let _ = handle
+            .request_start()
+            .await
+            .map_err(BotManagerError::Actor)?;
+        handle
+            .confirm_running()
+            .await
+            .map_err(BotManagerError::Actor)
+    }
+
     // ─── 内部方法 ─────────────────────────────────────────────────────────
 
     async fn get_actor(&self, bot_id: &BotId) -> Result<BotActorHandle, BotManagerError> {
@@ -632,12 +604,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     async fn get_required_bot_config(&self, bot_id: &BotId) -> Result<BotConfig, BotManagerError> {
-        let qq_id: u64 = bot_id
-            .as_str()
-            .parse()
-            .map_err(|_| BotManagerError::BotNotFound(bot_id.clone()))?;
-        self.repo
-            .get(qq_id)
+        self.get_bot_config(bot_id)
             .await?
             .ok_or_else(|| BotManagerError::BotNotFound(bot_id.clone()))
     }

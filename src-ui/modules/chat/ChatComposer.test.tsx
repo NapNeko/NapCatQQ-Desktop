@@ -342,6 +342,60 @@ describe('native composer keyboard', () => {
 });
 
 describe('attachment drag and drop', () => {
+    it('keeps a pending file bound to its original conversation and preserves later draft edits', async () => {
+        const store = new ChatAccountStore({
+            bot_id: 'attachment-target',
+            name: '测试',
+            qq_id: 99,
+            backend: 'napcat',
+            host: { kind: 'local' },
+            running: true,
+            online: true,
+        });
+        const first = {
+            key: 'private:12' as const,
+            id: '12',
+            name: '原会话',
+            type: 'private' as const,
+        };
+        const second = {
+            key: 'private:13' as const,
+            id: '13',
+            name: '新会话',
+            type: 'private' as const,
+        };
+        let finish!: (file: { path: string; name: string }) => void;
+        vi.spyOn(chatService, 'pickFile').mockReturnValue(
+            new Promise((resolve) => {
+                finish = resolve;
+            }),
+        );
+        const view = render(
+            <ChatComposer key={first.key} store={store} contact={first} disabledReason="" />,
+            { wrapper: ProviderWrapper },
+        );
+        fireEvent.click(screen.getByRole('button', { name: '添加文件' }));
+        await waitFor(() => expect(chatService.pickFile).toHaveBeenCalledOnce());
+        fireEvent.change(screen.getByRole('textbox', { name: '发送消息给原会话' }), {
+            target: { value: '读取文件期间继续输入' },
+        });
+        view.rerender(
+            <ChatComposer key={second.key} store={store} contact={second} disabledReason="" />,
+        );
+        fireEvent.change(screen.getByRole('textbox', { name: '发送消息给新会话' }), {
+            target: { value: '新会话草稿' },
+        });
+        await act(async () => finish({ path: '/tmp/report.pdf', name: 'report.pdf' }));
+        expect(store.getSnapshot().account.drafts[first.key]).toMatchObject({
+            text: '读取文件期间继续输入',
+            attachments: [{ path: '/tmp/report.pdf', name: 'report.pdf', type: 'file' }],
+        });
+        expect(store.getSnapshot().account.drafts[second.key]).toMatchObject({
+            text: '新会话草稿',
+            attachments: [],
+        });
+    });
+
     it('accepts native images and arbitrary files only inside the composer', async () => {
         let handler!: (event: FileDragDropEvent) => void;
         const unlisten = vi.fn();

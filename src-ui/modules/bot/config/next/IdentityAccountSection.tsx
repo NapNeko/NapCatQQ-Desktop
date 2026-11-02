@@ -2,10 +2,9 @@
 import { useEffect, useMemo } from 'react';
 import { Badge, FormSection, NumberField, TextField } from '../../../../shared/ui';
 import { useFeatures } from '../../../../hooks/preferences/featureTogglesStore';
-import { cn } from '../../../../shared/utils/cn';
 import type { BackendType } from '../../../../core/ipc/generated/domain/BackendType';
-import type { IdentityTabProps } from './IdentityTab';
-import { SelectionDot } from './identityParts';
+import type { IdentityTabProps } from './identityConfig';
+import { IdentityChoiceCard } from './IdentityChoiceCard';
 
 const BACKEND_ITEMS: ReadonlyArray<{
     value: BackendType;
@@ -91,46 +90,25 @@ export function IdentityAccountSection({
                         aria-label="底座类型"
                         className="grid grid-cols-1 gap-3 sm:grid-cols-2"
                     >
-                        {backendItems.map((item) => {
-                            const selected = data.backend_type === item.value;
-                            return (
-                                <button
-                                    key={item.value}
-                                    type="button"
-                                    role="radio"
-                                    aria-checked={selected}
-                                    disabled={isRunning}
-                                    onClick={() => onChange({ backend_type: item.value })}
-                                    className={cn(
-                                        'group relative flex h-full min-w-0 flex-col justify-between gap-1 rounded-md border px-3.5 py-2.5 text-left transition-all',
-                                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
-                                        'disabled:cursor-not-allowed disabled:opacity-60',
-                                        selected
-                                            ? 'border-brand/70 bg-brand-soft/20 shadow-xs ring-1 ring-brand/25'
-                                            : 'border-border-subtle bg-field/45 hover:border-border hover:bg-field/80',
-                                    )}
-                                >
-                                    <div className="flex items-center justify-between gap-2">
-                                        <div className="flex min-w-0 items-center gap-2">
-                                            <span className="truncate text-sm font-semibold text-text">
-                                                {item.label}
-                                            </span>
-                                            <Badge
-                                                tone={item.tone}
-                                                appearance="soft"
-                                                className="shrink-0 text-[11px]"
-                                            >
-                                                {item.badge}
-                                            </Badge>
-                                        </div>
-                                        <SelectionDot selected={selected} />
-                                    </div>
-                                    <p className="text-2xs leading-relaxed text-text-tertiary">
-                                        {item.summary}
-                                    </p>
-                                </button>
-                            );
-                        })}
+                        {backendItems.map((item) => (
+                            <IdentityChoiceCard
+                                key={item.value}
+                                selected={data.backend_type === item.value}
+                                disabled={isRunning}
+                                onSelect={() => onChange({ backend_type: item.value })}
+                                label={item.label}
+                                summary={item.summary}
+                                badge={
+                                    <Badge
+                                        tone={item.tone}
+                                        appearance="soft"
+                                        className="shrink-0 text-[11px]"
+                                    >
+                                        {item.badge}
+                                    </Badge>
+                                }
+                            />
+                        ))}
                     </div>
                 </div>
             </FormSection>

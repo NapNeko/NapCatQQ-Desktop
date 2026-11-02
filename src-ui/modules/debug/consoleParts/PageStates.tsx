@@ -2,7 +2,7 @@
 import { Bot, FlaskConical, RefreshCw } from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
 import { Button, PagePlaceholder, Spinner } from '../../../shared/ui';
-import type { AppRoute } from '../../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../../core/domain/ui/route';
 
 function EmptyIcon({ tone }: { tone: 'brand' | 'danger' }) {
     return (

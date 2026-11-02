@@ -5,7 +5,7 @@ import { ListTodo } from 'lucide-react';
 import { Button } from '../../shared/ui';
 import { PagePlaceholder } from '../../shared/ui/PagePlaceholder';
 import { MotionIcon } from '../../shared/ui/motion';
-import type { AppRoute } from '../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../core/domain/ui/route';
 import { TASK_KIND_VISUAL } from './taskQueueKindVisual';
 
 export interface TaskQueueEmptyStateProps {

@@ -1,7 +1,7 @@
 // 功能模块开关（app-settings 的 features）。启动时从磁盘恢复，保存设置后更新；
 // 侧栏、标题栏和各页入口只读这里。
 
-import { useSyncExternalStore } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 import {
     DEFAULT_FEATURES,
     featuresEqual,
@@ -29,5 +29,6 @@ export function useFeatures(): FeatureToggles {
 }
 
 export function useFeatureEnabled(key: FeatureKey): boolean {
-    return useFeatures()[key];
+    const getSnapshot = useCallback(() => store.getSnapshot()[key], [key]);
+    return useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot);
 }

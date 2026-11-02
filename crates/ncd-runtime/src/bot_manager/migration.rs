@@ -1,7 +1,14 @@
 // 跨服务器迁移的协议端预检、停机核实与生命周期隔离。
-use super::*;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+use std::time::Duration;
+
+use ncd_domain::{BackendType, BotActorState, BotConfig, BotId};
 use ncd_domain::{DeploymentType, SnowLumaStartMode};
 use ncd_host::{Host, HostCommand, HostPath, Os};
+use ncd_traits::{BotConfigRepo, ConfigStore};
+
+use super::{BotManager, BotManagerError};
 
 tokio::task_local! {
     static MIGRATION_PROTOCOL_BOT: BotId;
@@ -525,7 +532,14 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::events::BroadcastEventBus;
+    use async_trait::async_trait;
+    use ncd_domain::{
+        BotConfigError, DesktopNotifySettings, RuntimeTarget, StopMode, WebUiPollerSettings,
+    };
+    use ncd_traits::runtime_backend::{BotBackend, BotBackendError, BotStartCtx};
     use ncd_traits::runtime_backend::{BotStatus, LogSnapshot, TailOpts};
+    use tokio::sync::RwLock;
 
     struct RecoveryRepo(Vec<BotConfig>);
 

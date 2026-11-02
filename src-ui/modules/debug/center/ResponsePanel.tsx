@@ -38,7 +38,7 @@ import {
     type DataTableCellContext,
     type JsonTreeNodeContext,
 } from '../../../shared/ui';
-import type { AppRoute } from '../../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../../core/domain/ui/route';
 import { useMotion } from '../../../hooks/preferences/useMotion';
 import { useScrollMemory } from '../../../hooks/debug/debugScrollMemory';
 import { debugWorkspaceStore, type TabRun } from '../../../hooks/debug/debugWorkspaceStore';

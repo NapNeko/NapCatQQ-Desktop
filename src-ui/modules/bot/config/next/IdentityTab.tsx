@@ -1,19 +1,9 @@
 // 身份 Tab 只负责组合表单区域；各区域独立订阅自己的运行时数据。
-import type { ContainerEngine } from '../../../../core/ipc/generated/domain/ContainerEngine';
-import type { BotBasicConfig } from '../../../../core/ipc/generated/domain/BotBasicConfig';
 import { IdentityAccountSection } from './IdentityAccountSection';
 import { IdentityRuntimeSection } from './IdentityRuntimeSection';
 import { IdentityRecoverySection } from './IdentityRecoverySection';
 
-export interface IdentityTabProps {
-    data: BotBasicConfig;
-    onChange: (patch: Partial<BotBasicConfig>) => void;
-    isEditMode: boolean;
-    isRunning: boolean;
-    containerEngine?: ContainerEngine;
-    onContainerEngineChange?: (engine: ContainerEngine | undefined) => void;
-    containerEngineLocked?: boolean;
-}
+import type { IdentityTabProps } from './identityConfig';
 
 export function IdentityTab(props: IdentityTabProps) {
     return (
@@ -24,7 +14,14 @@ export function IdentityTab(props: IdentityTabProps) {
                 isEditMode={props.isEditMode}
                 isRunning={props.isRunning}
             />
-            <IdentityRuntimeSection {...props} />
+            <IdentityRuntimeSection
+                data={props.data}
+                onChange={props.onChange}
+                isRunning={props.isRunning}
+                containerEngine={props.containerEngine}
+                onContainerEngineChange={props.onContainerEngineChange}
+                containerEngineLocked={props.containerEngineLocked}
+            />
             <IdentityRecoverySection data={props.data} onChange={props.onChange} />
         </div>
     );

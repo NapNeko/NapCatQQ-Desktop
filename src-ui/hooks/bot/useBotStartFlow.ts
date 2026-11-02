@@ -21,7 +21,7 @@ import type { BotConfig } from '../../core/ipc/generated/domain/BotConfig';
 import type { SnowLumaAgreementsPayload } from '../../core/ipc/generated/SnowLumaAgreementsPayload';
 import type { ConfigDrift } from '../../core/ipc/generated/ConfigDrift';
 import type { DriftDecision } from '../../core/ipc/generated/DriftDecision';
-import type { AppRoute } from '../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../core/domain/ui/route';
 import type { useBotMutations } from './useBotMutations';
 
 export function useBotStartFlow({

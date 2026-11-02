@@ -3,10 +3,14 @@
 use std::collections::{HashMap, VecDeque};
 
 use futures_util::future::BoxFuture;
+use futures_util::stream::{FuturesUnordered, StreamExt};
+use ncd_traits::{BotConfigRepo, ConfigStore};
 use tokio_util::sync::CancellationToken;
+use tracing::{info, warn};
 
-use super::*;
+use super::BotManager;
 use crate::events::EventSubscription;
+use crate::events::{DomainEvent, EventBus, EventFilter};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum HostChange {
@@ -169,6 +173,9 @@ async fn next_host_change(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::events::BroadcastEventBus;
+    use std::sync::Arc;
+    use std::time::Duration;
     use tokio::sync::{Semaphore, mpsc};
 
     #[tokio::test]

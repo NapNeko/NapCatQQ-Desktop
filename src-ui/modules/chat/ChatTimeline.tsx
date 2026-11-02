@@ -25,7 +25,7 @@ import { MessageSkeleton } from './ChatSkeleton';
 import { preserveTimelineReading } from '../../shared/chat/timelineReadingAnchor';
 import { ChatPresence } from './chatMotion';
 import { TimelineMessage } from './TimelineMessage';
-import { selectTimeline, equalTimeline } from './chatViewSelectors';
+import { createTimelineSelector, equalTimeline } from './chatViewSelectors';
 import { useTimelinePosition } from './useTimelinePosition';
 import { useChatNotice } from '../../hooks/chat/useChatNotice';
 import { useSmoothWheel } from './useSmoothWheel';
@@ -76,11 +76,15 @@ export const NativeTimeline = memo(function NativeTimeline({
     const [selecting, setSelecting] = useState(false);
     const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
     const [forwardKeys, setForwardKeys] = useState<string[]>([]);
+    const selectTimeline = useMemo(
+        () => createTimelineSelector(contact.key, messages),
+        [contact.key, messages],
+    );
     const snapshot = useChatSelector(store, selectTimeline, equalTimeline);
     // target 经 hook 内部 ref 每次调用时求值，与原闭包直读 store.target 的时机一致。
     const media = useChatMedia(() => store.target);
     const chatSend = useChatSend(store);
-    const history = snapshot.history[contact.key];
+    const history = snapshot.history;
     if (initialMessages.current === null && (messages.length || history?.loaded))
         initialMessages.current = new Set(
             messages
@@ -89,7 +93,7 @@ export const NativeTimeline = memo(function NativeTimeline({
         );
     useEffect(() => {
         void store.ensureHistory(contact.key);
-    }, [store, contact.key, snapshot.connection.state, history]);
+    }, [store, contact.key, snapshot.connection, history]);
     const motion = useMotion();
     const sending = useMemo(
         () => messages.some((message) => message.status === 'sending'),
@@ -98,7 +102,7 @@ export const NativeTimeline = memo(function NativeTimeline({
     const retryDisabled =
         !store.target.running ||
         store.target.online === false ||
-        snapshot.connection.state !== 'connected' ||
+        snapshot.connection !== 'connected' ||
         sending;
     const getMessageKey = useCallback((index: number) => messages[index]?.key ?? index, [messages]);
     // 按消息 key 锚定 prepend 和异步行高变化，避免额外 scrollHeight 补偿重复移动视口。
@@ -205,7 +209,7 @@ export const NativeTimeline = memo(function NativeTimeline({
     const paging = useHistoryPaging({
         scroll,
         enabled:
-            snapshot.connection.state === 'connected' &&
+            snapshot.connection === 'connected' &&
             !!history?.loaded &&
             !history.loading &&
             !history.done &&
@@ -265,11 +269,6 @@ export const NativeTimeline = memo(function NativeTimeline({
         return () => clearTimeout(timer);
     }, [highlight]);
     const fallback = useChatView();
-    const senderNames = useMemo(() => {
-        const names = new Map<string, string>();
-        for (const message of snapshot.messages) names.set(message.senderId, message.senderName);
-        return names;
-    }, [snapshot.messages]);
     const messageById = useMemo(
         () =>
             new Map(
@@ -325,7 +324,7 @@ export const NativeTimeline = memo(function NativeTimeline({
             openLink: (url: string) => {
                 void chatSend.openLink(url).catch((e) => setError(String(e)));
             },
-            nameOf: (userId: number) => senderNames.get(String(userId)),
+            nameOf: (userId: number) => snapshot.names[String(userId)],
             findMessage: (messageId: number) => {
                 const m = messageById.get(String(messageId));
                 return m
@@ -353,7 +352,7 @@ export const NativeTimeline = memo(function NativeTimeline({
         }),
         [
             fallback,
-            senderNames,
+            snapshot.names,
             messageById,
             revealRef,
             store,

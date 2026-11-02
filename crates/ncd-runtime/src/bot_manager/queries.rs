@@ -1,6 +1,12 @@
 //! Bot 快照、配置、日志和 WebUI 端点的只读查询。
 
-use super::*;
+use super::{BotManager, BotManagerError};
+use crate::bot_actor::BotActorSnapshot;
+use ncd_domain::bot_config::BotConfig;
+use ncd_domain::ids::BotId;
+use ncd_domain::kinds::RuntimeTarget;
+use ncd_traits::{BotConfigRepo, ConfigStore};
+use std::collections::HashMap;
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     // ─── 查询 ─────────────────────────────────────────────────────────────
@@ -82,7 +88,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self.snowluma_ui.snapshot().await
     }
 
-    pub(super) fn peek_napcat_docker_webui_token(&self, qq_id: u64) -> Option<String> {
+    fn peek_napcat_docker_webui_token(&self, qq_id: u64) -> Option<String> {
         let store = self.docker_webui_secret_store.as_ref()?;
         let key = format!("bot:{qq_id}:napcat_docker_webui_token");
         store
@@ -158,7 +164,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .await
     }
 
-    pub(super) async fn count_active_bots_by_host(
+    async fn count_active_bots_by_host(
         &self,
         host_match: impl Fn(&RuntimeTarget) -> bool,
     ) -> Result<usize, BotManagerError> {
@@ -178,23 +184,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     .is_some_and(|t| host_match(t))
             })
             .count())
-    }
-
-    /// 单测 / 集成测试:把 Actor 标为 Running,不经过 backend start
-    #[doc(hidden)]
-    pub async fn test_confirm_actor_running(
-        &self,
-        bot_id: &BotId,
-    ) -> Result<BotActorSnapshot, BotManagerError> {
-        let handle = self.get_actor(bot_id).await?;
-        let _ = handle
-            .request_start()
-            .await
-            .map_err(BotManagerError::Actor)?;
-        handle
-            .confirm_running()
-            .await
-            .map_err(BotManagerError::Actor)
     }
 
     /// 拉取指定 Bot 的最近 lines 行日志快照

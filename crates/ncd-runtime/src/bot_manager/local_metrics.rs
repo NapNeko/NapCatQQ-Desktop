@@ -1,129 +1,30 @@
-//! 启动时的指标准备与远端节点映射刷新。
+//! 本机指标资产准备：仅负责文件与环境变量，不依赖 BotManager、Actor 或运行会话。
 
-use super::*;
+use std::collections::BTreeMap;
+use std::path::PathBuf;
 
-impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
-    /// 从 data_root 读 AppSettings 派生指标偏好（缺文件/解析失败 → 默认关）
-    pub(super) fn load_metrics_prefs(
-        data_root: &std::path::Path,
-    ) -> crate::metrics::BotRuntimeMetricsPrefs {
-        crate::metrics::BotRuntimeMetricsPrefs::from_data_root(data_root)
-    }
+use ncd_domain::{BackendType, BotConfig, BotId};
+use tracing::{info, warn};
 
-    /// 准备一次探针资产，同时用于加载脚本和进程环境；文件 I/O 不占用异步执行器。
-    pub(super) async fn apply_runtime_metrics_inject(
-        &self,
-        bot_id: &BotId,
-        config: &BotConfig,
-        runtime_config: &mut BotRuntimeConfig,
-    ) {
-        if !config.bot.runtime_target.is_local()
-            || config.bot.deployment_type == DeploymentType::Docker
-        {
-            return;
-        }
-        let Some(data_root) = self.store.config_dir().parent().map(|p| p.to_path_buf()) else {
-            return;
-        };
-        let config = config.clone();
-        let id = bot_id.clone();
-        let daemon = self.snowluma_daemon.clone();
-        let prepared = tokio::task::spawn_blocking(move || {
-            let prefs = Self::load_metrics_prefs(&data_root);
-            if config.bot.backend_type == BackendType::SnowLuma {
-                // 共享 SL node 吃主机级注册表，QQ 子进程不吃单账号探针环境。
-                if let Some(daemon) = daemon {
-                    let env = crate::metrics::prepare_snowluma_inject(
-                        &data_root,
-                        id.as_str(),
-                        &config,
-                        &prefs,
-                    )?;
-                    daemon.set_metrics_child_env(Some(env));
-                }
-                Ok(std::collections::BTreeMap::new())
-            } else {
-                prepare_napcat_metrics(&data_root, &id, &config, &prefs)
+use crate::metrics::{BotRuntimeMetricsPrefs, prepare_snowluma_inject};
+
+/// 文件读取与探针落盘均在阻塞线程完成；调用方负责把环境应用到对应运行时。
+pub(super) async fn prepare_local_metrics(
+    data_root: PathBuf,
+    bot_id: BotId,
+    config: BotConfig,
+) -> Result<BTreeMap<String, String>, String> {
+    tokio::task::spawn_blocking(move || {
+        let prefs = BotRuntimeMetricsPrefs::from_data_root(&data_root);
+        match config.bot.backend_type {
+            BackendType::SnowLuma => {
+                prepare_snowluma_inject(&data_root, bot_id.as_str(), &config, &prefs)
             }
-        })
-        .await;
-        match prepared {
-            Ok(Ok(environment)) => runtime_config.environment.extend(environment),
-            Ok(Err(error)) => warn!(
-                target: "ncd_runtime::bot_manager", bot_id = %bot_id, %error,
-                "metrics inject prepare failed"
-            ),
-            Err(error) => warn!(
-                target: "ncd_runtime::bot_manager", bot_id = %bot_id, %error,
-                "metrics inject task failed"
-            ),
+            BackendType::NapCat => prepare_napcat_metrics(&data_root, &bot_id, &config, &prefs),
         }
-    }
-
-    /// 远端：把最新 nodes.json 写到 ncd-watch metrics 目录（需 host 已连接）
-    pub(super) async fn refresh_remote_metrics_nodes_map(
-        &self,
-        bot_id: &BotId,
-        config: &BotConfig,
-    ) {
-        use ncd_host::HostPath;
-
-        if config.bot.backend_type == BackendType::SnowLuma
-            && config.bot.deployment_type == ncd_domain::DeploymentType::Native
-        {
-            self.refresh_snowluma_metrics_registration(config).await;
-            return;
-        }
-
-        let Some(server_id) = config.bot.runtime_target.server_id() else {
-            return;
-        };
-        let Some(resolver) = self.host_resolver.as_ref() else {
-            return;
-        };
-        let host = match resolver.resolve(&config.bot.runtime_target).await {
-            Ok(h) => h,
-            Err(err) => {
-                tracing::debug!(
-                    target: "ncd_runtime::bot_manager",
-                    bot_id = %bot_id,
-                    %err,
-                    "metrics remote nodes: host resolve skipped"
-                );
-                return;
-            }
-        };
-        // 与 watch sync 一致：~/ncd-watch/metrics/<bot>/nodes.json
-        let Ok(home) = crate::metrics::probe_remote_home(host.as_ref()).await else {
-            return;
-        };
-        let posix = crate::metrics::remote_metrics_nodes_posix(&home, bot_id.as_str());
-        let path = HostPath::from_posix(posix);
-        if let Some(parent) = path.parent() {
-            let _ = host.create_dir_all(&parent).await;
-        }
-        let nodes = crate::metrics::build_node_map(config);
-        let body = match serde_json::to_vec(&nodes) {
-            Ok(b) => b,
-            Err(_) => return,
-        };
-        if let Err(err) = host.write_file(&path, &body).await {
-            warn!(
-                target: "ncd_runtime::bot_manager",
-                bot_id = %bot_id,
-                server_id,
-                %err,
-                "metrics remote nodes map write failed"
-            );
-        } else {
-            info!(
-                target: "ncd_runtime::bot_manager",
-                bot_id = %bot_id,
-                server_id,
-                "metrics: refreshed remote nodes.json for hot map"
-            );
-        }
-    }
+    })
+    .await
+    .map_err(|error| format!("metrics inject task failed: {error}"))?
 }
 
 /// 加载脚本和进程环境使用同一次准备得到的探针与节点映射。

@@ -1,6 +1,20 @@
 //! Bot 启动与重启编排，包含启动代次、取消和进程提交确认。
 
-use super::*;
+use super::runtime_gate::describe_not_ready;
+use super::{BotManager, BotManagerError};
+use crate::bot_actor::{BotActorHandle, BotActorSnapshot, BotActorState};
+use crate::events::{DomainEvent, EventBus};
+use crate::runtime_launch_plan::RuntimeLaunchPlanError;
+use crate::snowluma::AgreementsPayload;
+use ncd_domain::bot_config::{BackendType, BotConfig};
+use ncd_domain::ids::BotId;
+use ncd_domain::kinds::{RuntimeTarget, StopMode};
+use ncd_domain::{DeploymentType, RuntimeScenario};
+use ncd_traits::runtime_backend::{BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx};
+use ncd_traits::{BotConfigRepo, ConfigStore};
+use std::sync::Arc;
+use std::time::Duration;
+use tracing::{error, info, warn};
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 带用户决议启动 Bot
@@ -129,11 +143,41 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    pub(super) fn build_runtime_config(
+    /// 启动编排仅负责将准备好的环境交给 QQ 进程或共享 SnowLuma daemon。
+    async fn apply_local_metrics(
         &self,
         bot_id: &BotId,
         config: &BotConfig,
-    ) -> BotRuntimeConfig {
+        runtime_config: &mut BotRuntimeConfig,
+    ) {
+        if !config.bot.runtime_target.is_local()
+            || config.bot.deployment_type == DeploymentType::Docker
+            || (config.bot.backend_type == BackendType::SnowLuma && self.snowluma_daemon.is_none())
+        {
+            return;
+        }
+        let Some(data_root) = self.store.config_dir().parent().map(|p| p.to_path_buf()) else {
+            return;
+        };
+        match super::local_metrics::prepare_local_metrics(data_root, bot_id.clone(), config.clone())
+            .await
+        {
+            Ok(environment) => match config.bot.backend_type {
+                BackendType::NapCat => runtime_config.environment.extend(environment),
+                BackendType::SnowLuma => {
+                    if let Some(daemon) = &self.snowluma_daemon {
+                        daemon.set_metrics_child_env(Some(environment));
+                    }
+                }
+            },
+            Err(error) => warn!(
+                target: "ncd_runtime::bot_manager", bot_id = %bot_id, %error,
+                "metrics inject prepare failed"
+            ),
+        }
+    }
+
+    fn build_runtime_config(&self, bot_id: &BotId, config: &BotConfig) -> BotRuntimeConfig {
         BotRuntimeConfig::default_path(self.store.root(), bot_id.clone())
             .with_runtime_defaults(self.store.root())
             .with_bot_config(config)
@@ -151,13 +195,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    pub(super) fn skip_post_start_status_recheck(config: &BotConfig) -> bool {
+    fn skip_post_start_status_recheck(config: &BotConfig) -> bool {
         config.bot.backend_type == BackendType::SnowLuma
             && config.bot.runtime_target.is_local()
             && config.bot.deployment_type == DeploymentType::Native
     }
 
-    pub(super) async fn ensure_snowluma_agreements_ready(
+    async fn ensure_snowluma_agreements_ready(
         &self,
         config: &BotConfig,
     ) -> Result<(), BotManagerError> {
@@ -173,10 +217,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     /// 框架 + Run 依赖预检。探测失败不拦(交给真正启动去报错),只有确认缺东西才拦
-    pub(super) async fn ensure_runtime_ready(
-        &self,
-        config: &BotConfig,
-    ) -> Result<(), BotManagerError> {
+    async fn ensure_runtime_ready(&self, config: &BotConfig) -> Result<(), BotManagerError> {
         let Some(gate) = self.runtime_gate.as_ref() else {
             return Ok(());
         };
@@ -199,14 +240,14 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    pub(super) fn snowluma_consent_required_error(version: &str) -> BotManagerError {
+    fn snowluma_consent_required_error(version: &str) -> BotManagerError {
         BotManagerError::Runtime(BotBackendError::Io(format!(
             "SNOWLUMA_CONSENT_REQUIRED: SnowLuma agreements version {version} requires consent"
         )))
     }
 
     /// 协议未签导致的启动中止：Starting → Stopped，不标 Crashed，避免 UI 协议弹窗与崩溃告警打架。
-    pub(super) async fn abort_start_for_consent(
+    async fn abort_start_for_consent(
         &self,
         bot_id: &BotId,
         handle: &BotActorHandle,
@@ -225,7 +266,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         err
     }
 
-    pub(super) async fn snowluma_docker_agreements_after_attach(
+    async fn snowluma_docker_agreements_after_attach(
         &self,
         config: &BotConfig,
     ) -> Result<Option<AgreementsPayload>, BotManagerError> {
@@ -301,7 +342,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         outcome
     }
 
-    pub(super) async fn start_runtime_generation(
+    async fn start_runtime_generation(
         &self,
         handle: &BotActorHandle,
         config: &BotConfig,
@@ -363,7 +404,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         };
         // 必须在 build_plan 之后：plan 会把 loadNapCat.js 写成无探针基线，
         // 若先 inject 再 build_plan，require(探针) 会被覆盖，永远写不出 net-stats。
-        self.apply_runtime_metrics_inject(bot_id, config, &mut runtime_config)
+        self.apply_local_metrics(bot_id, config, &mut runtime_config)
             .await;
 
         // 二次兜底：start_bot 入口已检查；Docker attach 后另有路径。
@@ -550,7 +591,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    pub(super) fn spawn_backend_start(
+    fn spawn_backend_start(
         &self,
         backend: Arc<dyn BotBackend>,
         context: BotStartCtx,

@@ -1,88 +1,32 @@
-//! JSON 配置读写、坏文件隔离和原子文件替换。
+//! 临时文件、坏文件隔离与原子替换；不依赖配置格式或历史策略。
 
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use ncd_domain::onebot_debug::DebugStorageNotice;
-use serde::de::DeserializeOwned;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
-use super::{
-    COLLECTIONS_FILE, HISTORY_FILE, IMPORT_MAX_BYTES, RENAME_RETRIES, RENAME_RETRY_DELAY,
-    TMP_MARKER, WORKSPACE_FILE,
-};
-
-enum Loaded<T> {
-    Missing,
-    Parsed(T),
-    /// 文件在，但读不出来或解析失败；里面是原因
-    Broken(String),
-}
+/// 临时文件留在目标同目录，启动时只清理调用方声明的文件名。
+const TMP_MARKER: &str = ".tmp-";
+/// Windows 杀软 / 索引服务会短暂占用刚写完的文件。
+const RENAME_RETRIES: u32 = 3;
+const RENAME_RETRY_DELAY: Duration = Duration::from_millis(50);
 
 pub(super) fn strip_bom(bytes: &[u8]) -> &[u8] {
     // 记事本另存为 UTF-8 会带 BOM，手改过文件的用户不该因此丢数据
     bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes)
 }
 
-pub(super) async fn read_json_read_only<T: DeserializeOwned + Default>(
-    path: &Path,
-) -> Result<T, String> {
-    let file = match tokio::fs::File::open(path).await {
-        Ok(file) => file,
-        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(T::default()),
-        Err(_) => return Err("无法只读加载调试台配置".to_owned()),
-    };
-    let mut bytes = Vec::new();
-    file.take(IMPORT_MAX_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .await
-        .map_err(|_| "无法只读加载调试台配置".to_owned())?;
-    if bytes.len() as u64 > IMPORT_MAX_BYTES {
-        return Err("调试台配置超过只读加载大小限制".to_owned());
-    }
-    serde_json::from_slice(strip_bom(&bytes))
-        .map_err(|_| "调试台配置损坏，请在桌面调试台处理".to_owned())
-}
-
-async fn read_json<T: DeserializeOwned>(path: &Path) -> Loaded<T> {
-    let bytes = match tokio::fs::read(path).await {
-        Ok(bytes) => bytes,
-        Err(e) if e.kind() == ErrorKind::NotFound => return Loaded::Missing,
-        Err(e) => return Loaded::Broken(format!("读取失败: {e}")),
-    };
-    match serde_json::from_slice(strip_bom(&bytes)) {
-        Ok(value) => Loaded::Parsed(value),
-        Err(e) => Loaded::Broken(e.to_string()),
-    }
-}
-
-pub(super) async fn load_json_or_default<T: DeserializeOwned + Default>(
-    dir: &Path,
-    file: &str,
-    notices: &mut Vec<DebugStorageNotice>,
-) -> T {
-    let path = dir.join(file);
-    match read_json(&path).await {
-        Loaded::Missing => T::default(),
-        Loaded::Parsed(value) => value,
-        Loaded::Broken(reason) => {
-            let moved = quarantine(&path).await;
-            notices.push(notice(file, moved, reason));
-            T::default()
-        }
-    }
-}
-
 /// 清掉数据目录里崩溃留下的 `<三份文件之一>.tmp-*`。尽力而为，删不掉的下次再说
-pub(super) async fn remove_orphan_tmp_files(dir: &Path) {
+pub(super) async fn remove_orphan_tmp_files(dir: &Path, files: &[&str]) {
     let Ok(mut entries) = tokio::fs::read_dir(dir).await else {
         return;
     };
     while let Ok(Some(entry)) = entries.next_entry().await {
         let name = entry.file_name().to_string_lossy().into_owned();
-        let is_ours = [WORKSPACE_FILE, COLLECTIONS_FILE, HISTORY_FILE]
+        let is_ours = files
             .iter()
             .any(|file| name.starts_with(&format!("{file}{TMP_MARKER}")));
         if !is_ours {

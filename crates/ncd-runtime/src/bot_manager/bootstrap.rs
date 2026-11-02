@@ -1,6 +1,15 @@
 //! Actor 启动恢复、远端会话接管及断线清理。
 
-use super::*;
+use super::{BatchResult, BootstrapResult, BotManager, BotManagerError, MAX_BOTS};
+use crate::bootstrap_reconcile::BootstrapReconciler;
+use crate::bot_actor::BotActorHandle;
+use ncd_domain::bot_config::{BackendType, BotConfig};
+use ncd_domain::ids::BotId;
+use ncd_domain::{DeploymentType, RuntimeScenario};
+use ncd_traits::{BotConfigRepo, ConfigStore};
+use std::collections::HashSet;
+use std::sync::Arc;
+use tracing::{info, warn};
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     pub(super) fn bootstrap_reconciler(&self) -> BootstrapReconciler<R> {
@@ -99,7 +108,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    pub(super) async fn reconcile_server_inner(
+    async fn reconcile_server_inner(
         &self,
         target_server_id: &str,
     ) -> Result<Vec<BotId>, BotManagerError> {

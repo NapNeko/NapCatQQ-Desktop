@@ -1,40 +1,22 @@
-// 会话草稿即时写回账号分区，异步选文件不改变发送目标。
-import {
-    memo,
-    useEffect,
-    useId,
-    useMemo,
-    useRef,
-    useState,
-    type ClipboardEvent,
-    type DragEvent,
-    type KeyboardEvent,
-    type RefObject,
-} from 'react';
-import { ArrowUp, AtSign, ImagePlus, Loader2, Paperclip, Smile, X } from 'lucide-react';
-import {
-    EMPTY_DRAFT,
-    type Attachment,
-    type Contact,
-    type Draft,
-} from '../../core/domain/chat/model';
-import { mentionLabel, mentionQueryAt, pruneMentions } from '../../core/domain/debug/composerModel';
+// 会话输入协调层：组合草稿、附件、提及和编辑器，负责发送与收起后的焦点。
+import { memo, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { ArrowUp, Loader2, X } from 'lucide-react';
+import type { Contact } from '../../core/domain/chat/model';
 import { errorText } from '../../core/domain/errors';
-import { useCommittedCaret } from '../../hooks/ui/useCommittedCaret';
-import { useChatSend } from '../../hooks/chat/useChatSend';
 import { useChatSelector, type ChatAccountStore } from '../../hooks/chat/chatStore';
-import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '../../shared/ui/Popover';
-import { ChatEmojiPicker } from './media/ChatEmojiPicker';
-import { ChatAttachmentStrip } from './ChatAttachmentStrip';
-import { createSendingSelector } from './chatViewSelectors';
-import { ChatAvatar } from '../../shared/chat/ChatAvatar';
-import { useComposerResize } from './useComposerResize';
+import { useChatScreenshot } from '../../hooks/chat/useChatScreenshot';
 import { Button } from '../../shared/ui/Button';
 import { ActionMotionIcon } from '../../shared/ui/motion/ActionMotionIcon';
+import { ChatAttachmentStrip } from './ChatAttachmentStrip';
+import { createSendingSelector } from './chatViewSelectors';
+import { useComposerResize } from './useComposerResize';
 import { ChatPresence, useChatComposerMotion } from './chatMotion';
 import { useComposerCollapse } from './useComposerCollapse';
-import { useChatScreenshot } from '../../hooks/chat/useChatScreenshot';
-import { ChatScreenshotTools } from './ChatScreenshotTools';
+import { useComposerDraft } from './composer/useComposerDraft';
+import { useComposerAttachments } from './composer/useComposerAttachments';
+import { useComposerMentions } from './composer/useComposerMentions';
+import { ComposerEditor } from './composer/ComposerEditor';
+import { ComposerTools } from './composer/ComposerTools';
 
 export const ChatComposer = memo(function ChatComposer({
     store,
@@ -49,263 +31,56 @@ export const ChatComposer = memo(function ChatComposer({
     inputRef?: RefObject<HTMLTextAreaElement>;
     collapsed?: boolean;
 }) {
-    const draft = useChatSelector(
-        store,
-        (snapshot) => snapshot.account.drafts[contact.key] ?? EMPTY_DRAFT,
-    );
-    const sendingSelector = useMemo(() => createSendingSelector(contact.key), [contact.key]);
-    const sending = useChatSelector(store, sendingSelector);
-    const { pickFile, readLocalImage, onFileDragDrop, stageAttachment } = useChatSend(store);
     const localInput = useRef<HTMLTextAreaElement>(null);
     const input = inputRef ?? localInput;
-    const commitCaret = useCommittedCaret(input, draft.text);
+    const composer = useRef<HTMLDivElement>(null);
+    const { draft, editor } = useComposerDraft(store, contact.key, input);
+    const sendingSelector = useMemo(() => createSendingSelector(contact.key), [contact.key]);
+    const sending = useChatSelector(store, sendingSelector);
+    const [emoji, setEmoji] = useState(false);
+    const [error, setError] = useState('');
+    const attachments = useComposerAttachments({
+        store,
+        editor,
+        composer,
+        input,
+        collapsed,
+        onError: setError,
+    });
+    const mentions = useComposerMentions({
+        store,
+        contact,
+        text: draft.text,
+        editor,
+        enabled: !collapsed && !disabledReason,
+    });
     const screenshot = useChatScreenshot(store, contact.key, collapsed, () =>
         input.current?.focus({ preventScroll: true }),
     );
-    const composing = useRef(false);
-    const composer = useRef<HTMLDivElement>(null);
-    const previouslyCollapsed = useRef(collapsed);
     const { handle: resize, remeasure } = useComposerResize(input, composer, draft.text, collapsed);
     useComposerCollapse(composer, collapsed, remeasure);
-    const [emoji, setEmoji] = useState(false);
-    const [error, setError] = useState('');
-    const restoreAfterEmoji = useRef(false);
-    const [pendingFiles, setPendingFiles] = useState(0);
-    const [dragging, setDragging] = useState(false);
-    const dragDepth = useRef(0);
-    const dropEnabled = useRef(!collapsed);
-    dropEnabled.current = !collapsed;
-    useEffect(() => {
-        if (!onFileDragDrop) return;
-        let alive = true;
-        const listening = onFileDragDrop((event) => {
-            if (!alive) return;
-            if (event.type === 'leave' || !dropEnabled.current) {
-                setDragging(false);
-                return;
-            }
-            const bounds = composer.current?.getBoundingClientRect();
-            const point = event.position;
-            const inside =
-                !!bounds &&
-                !!point &&
-                point.x >= bounds.left &&
-                point.x <= bounds.right &&
-                point.y >= bounds.top &&
-                point.y <= bounds.bottom;
-            setDragging(inside && event.type !== 'drop');
-            if (event.type !== 'drop' || !inside) return;
-            const current = store.getSnapshot().account.drafts[contact.key] ?? EMPTY_DRAFT;
-            const slots = Math.max(0, 8 - current.attachments.length);
-            const files = event.paths.slice(0, slots).map((path): Attachment => ({
-                key: crypto.randomUUID(),
-                path,
-                name: path.split(/[\\/]/).pop() || path,
-                type: /\.(png|jpe?g|gif|webp|bmp)$/i.test(path) ? 'image' : 'file',
-            }));
-            store.draft(contact.key, {
-                ...current,
-                attachments: [...current.attachments, ...files],
-            });
-            setError(event.paths.length > slots ? '一次最多添加 8 个附件' : '');
-            input.current?.focus({ preventScroll: true });
-        });
-        void listening.catch((failure) => {
-            if (alive) setError(errorText(failure));
-        });
-        return () => {
-            alive = false;
-            void listening.then((unlisten) => unlisten()).catch(() => {});
-        };
-    }, [onFileDragDrop, store, contact.key, input]);
-    const [caret, setCaret] = useState(0);
-    const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
-    const [memberError, setMemberError] = useState('');
-    const [memberLoading, setMemberLoading] = useState(false);
-    const [mentionDismissed, dismissMention] = useState(false);
-    const [memberIndex, setMemberIndex] = useState(0);
-    const [memberRetry, retryMembers] = useState(0);
-    const membersLoaded = useRef(false);
-    const memberList = useRef<HTMLDivElement>(null);
-    const memberListId = useId();
-    const query =
-        contact.type === 'group' && !mentionDismissed ? mentionQueryAt(draft.text, caret) : null;
-    const mentionOpen = query !== null;
-    const memberVisible = mentionOpen && !disabledReason && !collapsed;
+    const previouslyCollapsed = useRef(collapsed);
+    const dismissMention = mentions.dismiss;
     useEffect(() => {
         let frame = 0;
         if (collapsed) {
-            restoreAfterEmoji.current = false;
             setEmoji(false);
             dismissMention(true);
-            setDragging(false);
-            dragDepth.current = 0;
             if (composer.current?.contains(document.activeElement)) input.current?.blur();
         } else if (previouslyCollapsed.current) {
             frame = requestAnimationFrame(() => input.current?.focus({ preventScroll: true }));
         }
         previouslyCollapsed.current = collapsed;
         return () => cancelAnimationFrame(frame);
-    }, [collapsed, input]);
-    useEffect(() => {
-        if (!mentionOpen || membersLoaded.current || disabledReason || collapsed) return;
-        let cancelled = false;
-        setMemberLoading(true);
-        setMemberError('');
-        void store
-            .members(contact.key)
-            .then((value) => {
-                if (!cancelled) {
-                    setMembers(value);
-                    membersLoaded.current = true;
-                }
-            })
-            .catch((e) => {
-                if (!cancelled) setMemberError(errorText(e));
-            })
-            .finally(() => {
-                if (!cancelled) setMemberLoading(false);
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [mentionOpen, store, contact.key, disabledReason, memberRetry, collapsed]);
-    const memberSearch = useMemo(
-        () =>
-            members.map((member) => ({
-                member,
-                text: `${member.name} ${member.id}`.toLocaleLowerCase(),
-            })),
-        [members],
-    );
-    const mentionQuery = query?.query;
-    const filteredMembers = useMemo(() => {
-        if (mentionQuery === undefined) return [];
-        const needle = mentionQuery.toLocaleLowerCase();
-        const matches: typeof members = [];
-        for (const { member, text } of memberSearch) {
-            if (!text.includes(needle)) continue;
-            matches.push(member);
-            if (matches.length === 30) break;
-        }
-        return matches;
-    }, [mentionQuery, memberSearch]);
-    const selectedMember = Math.min(memberIndex, Math.max(0, filteredMembers.length - 1));
-    useEffect(() => {
-        setMemberIndex(0);
-    }, [query?.query]);
-    useEffect(() => {
-        memberList.current
-            ?.querySelector('[aria-selected=true]')
-            ?.scrollIntoView?.({ block: 'nearest' });
-    }, [selectedMember]);
+    }, [collapsed, input, dismissMention]);
     useEffect(() => {
         if (draft.reply && !collapsed) input.current?.focus();
     }, [draft.reply, collapsed, input]);
-    const current = () => store.getSnapshot().account.drafts[contact.key] ?? EMPTY_DRAFT;
-    const patch = (value: Partial<Draft>) => store.draft(contact.key, { ...current(), ...value });
-    const chooseEmoji = (attachment: Attachment) => {
-        if (current().attachments.length >= 8) {
-            setError('一次最多添加 8 个附件');
-            return;
-        }
-        patch({ attachments: [...current().attachments, attachment] });
-        restoreAfterEmoji.current = true;
-        setEmoji(false);
-        setError('');
-    };
-    const insert = (value: string) => {
-        const currentDraft = current();
-        const start = input.current?.selectionStart ?? currentDraft.text.length;
-        const end = input.current?.selectionEnd ?? start;
-        const text = currentDraft.text.slice(0, start) + value + currentDraft.text.slice(end);
-        commitCaret(text, start + value.length);
-        patch({ text, mentions: pruneMentions(text, currentDraft.mentions ?? []) });
-        setCaret(start + value.length);
-    };
-    const pick = async (type: 'image' | 'file') => {
-        setError('');
-        setPendingFiles((count) => count + 1);
-        try {
-            const file = await pickFile();
-            if (!file) return;
-            if (current().attachments.length >= 8) throw new Error('一次最多添加 8 个附件');
-            if (type === 'image' && !/.(png|jpe?g|gif|webp|bmp)$/i.test(file.name))
-                throw new Error('请选择 PNG、JPG、GIF、WebP 或 BMP 图片');
-            patch({
-                attachments: [
-                    ...current().attachments,
-                    { ...file, key: crypto.randomUUID(), type },
-                ],
-            });
-        } catch (e) {
-            setError(errorText(e));
-        } finally {
-            setPendingFiles((count) => count - 1);
-        }
-    };
-    const addAttachment = async (file: globalThis.File) => {
-        setPendingFiles((count) => count + 1);
-        try {
-            const image = file.type.startsWith('image/');
-            if (file.size > (image ? 10 : 64) * 1024 * 1024)
-                throw new Error(
-                    image ? '粘贴图片不能超过 10 MB' : '浏览器附件不能超过 64 MB，请用附件按钮选择',
-                );
-            const data = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(String(reader.result));
-                reader.onerror = () => reject(new Error('读取图片失败'));
-                reader.readAsDataURL(file);
-            });
-            const base64 = data.slice(data.indexOf(',') + 1);
-            const path = await stageAttachment(file.name || '粘贴的图片.png', base64);
-            if (current().attachments.length >= 8) throw new Error('一次最多添加 8 个附件');
-            patch({
-                attachments: [
-                    ...current().attachments,
-                    {
-                        key: crypto.randomUUID(),
-                        path,
-                        name: file.name || '粘贴的图片.png',
-                        type: image ? 'image' : 'file',
-                    },
-                ],
-            });
-        } catch (e) {
-            setError(errorText(e));
-        } finally {
-            setPendingFiles((count) => count - 1);
-        }
-    };
-    const addAttachments = async (files: globalThis.File[]) => {
-        const slots = Math.max(0, 8 - current().attachments.length);
-        setError(files.length > slots ? '一次最多添加 8 个附件' : '');
-        // 顺序读取，避免多份大附件同时膨胀成 base64 驻留内存。
-        for (const file of files.slice(0, slots)) await addAttachment(file);
-    };
-    const paste = (event: ClipboardEvent) => {
-        if (collapsed) return;
-        const images = Array.from(event.clipboardData.files);
-        if (images.length) {
-            event.preventDefault();
-            void addAttachments(images);
-        }
-    };
-    const drop = (event: DragEvent) => {
-        event.preventDefault();
-        dragDepth.current = 0;
-        setDragging(false);
-        if (collapsed || onFileDragDrop) return;
-        setError('');
-        const files = Array.from(event.dataTransfer.files);
-        void addAttachments(files);
-    };
     const canSend =
         !collapsed &&
         !disabledReason &&
         !sending &&
-        !pendingFiles &&
+        !attachments.pending &&
         !screenshot.capturing &&
         (!!draft.text.trim() || draft.attachments.length > 0);
     useChatComposerMotion(composer, canSend, error);
@@ -313,63 +88,8 @@ export const ChatComposer = memo(function ChatComposer({
         if (!canSend) return;
         setEmoji(false);
         setError('');
-        void store.send(contact.key).catch((e) => setError(errorText(e)));
-        // 点击发送也回到编辑框，下一句话可以接着输入。
+        void store.send(contact.key).catch((error) => setError(errorText(error)));
         input.current?.focus();
-    };
-    const chooseMember = (member: { id: string; name: string }) => {
-        if (!query) return;
-        const value = current();
-        const label = mentionLabel(
-            member.name,
-            member.id,
-            value.mentions ?? [],
-            members.filter((m) => m.name === member.name).length,
-        );
-        const text = value.text.slice(0, query.start) + label + ' ' + value.text.slice(caret);
-        const nextCaret = query.start + label.length + 1;
-        commitCaret(text, nextCaret);
-        patch({ text, mentions: [...(value.mentions ?? []), { qq: member.id, label }] });
-        setCaret(nextCaret);
-        dismissMention(true);
-    };
-    const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-        if (collapsed) return;
-        if (event.nativeEvent.isComposing || composing.current || event.keyCode === 229) return;
-        if (event.key === 'Escape') {
-            dismissMention(true);
-            setEmoji(false);
-            return;
-        }
-        if (memberVisible && query) {
-            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-                event.preventDefault();
-                if (filteredMembers.length)
-                    setMemberIndex(
-                        (selectedMember +
-                            (event.key === 'ArrowDown' ? 1 : -1) +
-                            filteredMembers.length) %
-                            filteredMembers.length,
-                    );
-                return;
-            }
-            if ((event.key === 'Enter' || event.key === 'Tab') && !event.shiftKey) {
-                event.preventDefault();
-                if (filteredMembers[selectedMember]) chooseMember(filteredMembers[selectedMember]);
-                else if (event.key === 'Tab') dismissMention(true);
-                return;
-            }
-        }
-        if (
-            event.key === 'Enter' &&
-            !event.shiftKey &&
-            !event.altKey &&
-            !event.ctrlKey &&
-            !event.metaKey
-        ) {
-            event.preventDefault();
-            send();
-        }
     };
     return (
         <div
@@ -378,22 +98,10 @@ export const ChatComposer = memo(function ChatComposer({
             data-collapsed={collapsed}
             aria-hidden={collapsed || undefined}
             {...(collapsed ? { inert: '' } : {})}
-            onPaste={paste}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={drop}
-            onDragEnter={(e) => {
-                if (Array.from(e.dataTransfer.types).includes('Files')) {
-                    dragDepth.current++;
-                    setDragging(true);
-                }
-            }}
-            onDragLeave={() => {
-                dragDepth.current = Math.max(0, dragDepth.current - 1);
-                if (!dragDepth.current) setDragging(false);
-            }}
+            {...attachments.handlers}
         >
             <button {...resize} />
-            <div className="native-chat-editor" data-dragging={dragging}>
+            <div className="native-chat-editor" data-dragging={attachments.dragging}>
                 <ChatPresence visible={!!draft.reply}>
                     <div className="native-chat-reply">
                         <span className="min-w-0 flex-1 truncate">
@@ -405,7 +113,7 @@ export const ChatComposer = memo(function ChatComposer({
                             className="native-chat-icon"
                             aria-label="取消引用"
                             onClick={() => {
-                                patch({ reply: null });
+                                editor.patch({ reply: null });
                                 input.current?.focus();
                             }}
                         >
@@ -415,195 +123,32 @@ export const ChatComposer = memo(function ChatComposer({
                 </ChatPresence>
                 <ChatAttachmentStrip
                     attachments={draft.attachments}
-                    readLocalImage={readLocalImage}
-                    onRemove={(key) =>
-                        patch({
-                            attachments: current().attachments.filter((file) => file.key !== key),
-                        })
-                    }
+                    readLocalImage={attachments.readLocalImage}
+                    onRemove={attachments.remove}
                 />
-                <div className="native-chat-composer-tools">
-                    <Popover
-                        open={emoji && !collapsed}
-                        onOpenChange={(open) => {
-                            if (open) restoreAfterEmoji.current = false;
-                            setEmoji(open);
-                        }}
-                    >
-                        <PopoverTrigger asChild>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="native-chat-icon"
-                                aria-label="表情"
-                                title="表情"
-                            >
-                                <Smile size={18} />
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                            side="top"
-                            align="start"
-                            className="native-chat-popover w-auto p-2"
-                            aria-label="选择表情"
-                            onCloseAutoFocus={(e) => {
-                                if (restoreAfterEmoji.current) {
-                                    e.preventDefault();
-                                    input.current?.focus();
-                                }
-                            }}
-                        >
-                            <ChatEmojiPicker
-                                target={store.target}
-                                onSelect={chooseEmoji}
-                                disabledReason={disabledReason}
-                            />
-                        </PopoverContent>
-                    </Popover>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="native-chat-icon"
-                        aria-label="添加图片"
-                        title="添加图片"
-                        disabled={!!pendingFiles}
-                        onClick={() => void pick('image')}
-                    >
-                        <ActionMotionIcon
-                            icon={pendingFiles ? Loader2 : ImagePlus}
-                            motion={pendingFiles ? 'spin' : 'none'}
-                            size={18}
-                        />
-                    </Button>
-                    <ChatScreenshotTools screenshot={screenshot} collapsed={collapsed} />
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="native-chat-icon"
-                        aria-label="添加文件"
-                        title="添加文件"
-                        disabled={!!pendingFiles}
-                        onClick={() => void pick('file')}
-                    >
-                        <Paperclip size={18} />
-                    </Button>
-                    {contact.type === 'group' && (
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="native-chat-icon"
-                            aria-label="提及成员"
-                            title="提及成员"
-                            onClick={() => {
-                                dismissMention(false);
-                                insert('@');
-                            }}
-                        >
-                            <AtSign size={18} />
-                        </Button>
-                    )}
-                </div>
-                <Popover
-                    open={memberVisible}
-                    onOpenChange={(open) => {
-                        if (!open) dismissMention(true);
-                    }}
-                >
-                    <PopoverAnchor asChild>
-                        <div>
-                            <textarea
-                                ref={input}
-                                aria-label={`发送消息给${contact.name}`}
-                                placeholder="写点什么…"
-                                value={draft.text}
-                                rows={2}
-                                aria-autocomplete={contact.type === 'group' ? 'list' : undefined}
-                                aria-controls={memberVisible ? memberListId : undefined}
-                                aria-activedescendant={
-                                    memberVisible && filteredMembers[selectedMember]
-                                        ? `${memberListId}-${filteredMembers[selectedMember].id}`
-                                        : undefined
-                                }
-                                onChange={(e) => {
-                                    patch({
-                                        text: e.target.value,
-                                        mentions: pruneMentions(
-                                            e.target.value,
-                                            draft.mentions ?? [],
-                                        ),
-                                    });
-                                    setCaret(e.target.selectionStart);
-                                    dismissMention(false);
-                                }}
-                                onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
-                                onCompositionStart={() => {
-                                    composing.current = true;
-                                }}
-                                onCompositionEnd={() => {
-                                    composing.current = false;
-                                }}
-                                onKeyDown={onKeyDown}
-                            />
-                        </div>
-                    </PopoverAnchor>
-                    <PopoverContent
-                        side="top"
-                        align="start"
-                        className="native-chat-popover native-chat-mentions"
-                        onOpenAutoFocus={(e) => e.preventDefault()}
-                        onCloseAutoFocus={(e) => e.preventDefault()}
-                        onInteractOutside={(e) => {
-                            if (e.detail.originalEvent.target === input.current) e.preventDefault();
-                        }}
-                        onEscapeKeyDown={() => dismissMention(true)}
-                    >
-                        <div
-                            ref={memberList}
-                            id={memberListId}
-                            role="listbox"
-                            aria-label="群成员建议"
-                        >
-                            {memberLoading ? (
-                                <p role="status">正在读取群成员…</p>
-                            ) : memberError ? (
-                                <>
-                                    <p role="status">{memberError}</p>
-                                    <button onClick={() => retryMembers((n) => n + 1)}>
-                                        重试读取成员
-                                    </button>
-                                </>
-                            ) : !filteredMembers.length ? (
-                                <p role="status">没有匹配的成员</p>
-                            ) : (
-                                filteredMembers.map((member, index) => (
-                                    <button
-                                        key={member.id}
-                                        id={`${memberListId}-${member.id}`}
-                                        role="option"
-                                        aria-selected={index === selectedMember}
-                                        tabIndex={-1}
-                                        onMouseDown={(e) => e.preventDefault()}
-                                        onClick={() => chooseMember(member)}
-                                    >
-                                        <ChatAvatar
-                                            contact={{
-                                                type: 'private',
-                                                id: member.id,
-                                                name: member.name || member.id,
-                                            }}
-                                            small
-                                        />
-                                        <span className="min-w-0 flex-1 truncate">
-                                            {member.name || member.id}
-                                        </span>
-                                        <span>{member.id}</span>
-                                    </button>
-                                ))
-                            )}
-                        </div>
-                    </PopoverContent>
-                </Popover>
-                <ChatPresence visible={dragging}>
+                <ComposerTools
+                    target={store.target}
+                    group={contact.type === 'group'}
+                    input={input}
+                    screenshot={screenshot}
+                    attachments={attachments}
+                    collapsed={collapsed}
+                    disabledReason={disabledReason}
+                    emoji={emoji}
+                    setEmoji={setEmoji}
+                    onMention={mentions.insert}
+                />
+                <ComposerEditor
+                    input={input}
+                    contact={contact}
+                    draft={draft}
+                    editor={editor}
+                    mentions={mentions}
+                    collapsed={collapsed}
+                    onSend={send}
+                    onEscape={() => setEmoji(false)}
+                />
+                <ChatPresence visible={attachments.dragging}>
                     <div className="native-chat-drop-hint">松开添加图片或文件</div>
                 </ChatPresence>
                 <footer>
@@ -611,7 +156,7 @@ export const ChatComposer = memo(function ChatComposer({
                         {error ||
                             (screenshot.capturing
                                 ? '截图中…'
-                                : pendingFiles
+                                : attachments.pending
                                   ? '正在读取附件…'
                                   : disabledReason)}
                     </span>

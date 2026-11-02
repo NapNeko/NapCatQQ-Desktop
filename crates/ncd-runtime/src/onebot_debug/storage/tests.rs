@@ -1,11 +1,15 @@
 use ncd_domain::onebot_debug::{
     DebugCallOutcome, DebugChannelChoice, DebugRequestDraft, DebugSavedFolder, DebugSavedRequest,
 };
-use serde_json::json;
+use serde_json::{Value, json};
 
 use super::super::params::PARAM_STRING_LIMIT;
+use super::config::MAX_TABS;
 use super::files::notice;
-use super::history::is_credential_action;
+use super::history::{HISTORY_KEEP, HISTORY_RESPONSE_LIMIT, is_credential_action};
+use super::history_file::{
+    READ_ONLY_HISTORY_LINE_LIMIT, READ_ONLY_HISTORY_RETAINED_LIMIT, READ_ONLY_HISTORY_SCAN_LIMIT,
+};
 use super::*;
 use ncd_domain::bot_config::BackendType;
 use ncd_domain::onebot_debug::{
@@ -148,7 +152,6 @@ async fn mcp_warm_history_detail_bounds_disk_lines_and_scan() {
         let store = DebugStore::load_with_budget(root.path(), 1).await;
         let record = entry("cached", "get_status", "1", true);
         store.append_history(record.clone()).await.unwrap();
-        assert!(store.history.lock().await.entries[0].response_on_disk);
         assert_eq!(
             store.history_entry_read_only("cached").await.unwrap(),
             Some(record.clone())
@@ -1261,18 +1264,17 @@ async fn response_budget_evicts_oldest_and_history_entry_reads_disk() {
     }
     {
         let mem = store.history.lock().await;
-        assert!(mem.response_bytes <= budget);
-        let in_memory = mem
-            .entries
-            .iter()
-            .filter(|m| m.entry.response.is_some())
+        let in_memory = (0..20)
+            .filter(|index| matches!(mem.lookup(&format!("e{index}")), Some(HistoryLookup::Complete(entry)) if entry.response.is_some()))
             .count();
         assert_eq!(in_memory, 4);
-        // 最老的被丢了并记着「在文件里」，最新的还在
-        assert!(mem.entries[0].response_on_disk);
-        assert!(mem.entries[0].entry.response.is_none());
-        assert!(!mem.entries[19].response_on_disk);
-        assert!(mem.entries[19].entry.response.is_some());
+        // 最老的需要补读，最新的已经完整；不依赖缓存队列或预算字段。
+        assert!(
+            matches!(mem.lookup("e0"), Some(HistoryLookup::NeedsResponse(entry)) if entry.response.is_none())
+        );
+        assert!(
+            matches!(mem.lookup("e19"), Some(HistoryLookup::Complete(entry)) if entry.response.is_some())
+        );
     }
 
     // 列表摘要不受影响；被丢的回包从文件里读回全文
@@ -1321,14 +1323,11 @@ async fn load_respects_response_budget() {
     let reloaded = DebugStore::load_with_budget(root.path(), budget).await;
     {
         let mem = reloaded.history.lock().await;
-        assert!(mem.response_bytes <= budget);
-        let in_memory = mem
-            .entries
-            .iter()
-            .filter(|m| m.entry.response.is_some())
+        let in_memory = (0..20)
+            .filter(|index| matches!(mem.lookup(&format!("e{index}")), Some(HistoryLookup::Complete(entry)) if entry.response.is_some()))
             .count();
         assert_eq!(in_memory, 4);
-        assert_eq!(mem.entries.len(), 20);
+        assert_eq!(mem.page(&query()).total, 20);
     }
     let oldest = reloaded.history_entry("e0").await.unwrap();
     assert_eq!(oldest.response, Some(Value::String("x".repeat(20 * 1024))));
@@ -1361,7 +1360,10 @@ async fn streaming_compaction_keeps_responses_evicted_from_memory() {
     // 内存里早就丢了回包的条目，压缩后仍能读回全文
     {
         let mem = store.history.lock().await;
-        assert!(mem.entries[0].response_on_disk);
+        assert!(matches!(
+            mem.lookup("e202"),
+            Some(HistoryLookup::NeedsResponse(_))
+        ));
     }
     let full = store.history_entry("e202").await.unwrap();
     assert_eq!(full.response, Some(Value::String("x".repeat(2 * 1024))));
@@ -1383,11 +1385,12 @@ fn unpersisted_responses_are_never_evicted() {
     let mut mem = HistoryMem::new(100);
     mem.push(entry_with_response("a", 200), 202, false);
     mem.push(entry_with_response("b", 200), 202, true);
-    assert!(mem.entries[0].entry.response.is_some());
-    assert!(!mem.entries[0].response_on_disk);
-    assert!(mem.entries[1].entry.response.is_none());
-    assert!(mem.entries[1].response_on_disk);
-    assert_eq!(mem.response_bytes, 202);
+    assert!(
+        matches!(mem.lookup("a"), Some(HistoryLookup::Complete(entry)) if entry.response == Some(Value::String("x".repeat(200))))
+    );
+    assert!(
+        matches!(mem.lookup("b"), Some(HistoryLookup::NeedsResponse(entry)) if entry.response.is_none())
+    );
 }
 
 #[test]
@@ -1397,20 +1400,23 @@ fn response_budget_survives_history_rotation_and_clear() {
     for index in 0..HISTORY_KEEP + 10 {
         mem.push(entry_with_response(&index.to_string(), 18), 20, true);
     }
-    assert_eq!(mem.entries.len(), HISTORY_KEEP);
-    assert_eq!(mem.response_bytes, 20);
-    assert!(mem.entries.back().unwrap().entry.response.is_some());
+    assert_eq!(mem.page(&query()).total as usize, HISTORY_KEEP);
+    assert!(mem.lookup("9").is_none());
     assert!(
-        mem.entries
-            .iter()
-            .take(HISTORY_KEEP - 1)
-            .all(|entry| entry.response_on_disk)
+        matches!(mem.lookup(&(HISTORY_KEEP + 9).to_string()), Some(HistoryLookup::Complete(entry)) if entry.response.is_some())
     );
+    assert!((10..HISTORY_KEEP + 9).all(|index| matches!(
+        mem.lookup(&index.to_string()),
+        Some(HistoryLookup::NeedsResponse(_))
+    )));
 
     mem.clear();
+    assert_eq!(mem.page(&query()).total, 0);
     mem.push(entry_with_response("fresh", 30), 32, true);
-    assert_eq!(mem.response_bytes, 0);
-    assert!(mem.entries[0].response_on_disk);
+    assert!(matches!(
+        mem.lookup("fresh"),
+        Some(HistoryLookup::NeedsResponse(_))
+    ));
 }
 
 // --- 参数与凭据 -------------------------------------------------------------
@@ -1619,7 +1625,7 @@ async fn failed_writes_leave_memory_unchanged() {
 async fn failed_append_keeps_entry_in_memory_and_reports_error() {
     let root = tempfile::tempdir().unwrap();
     let dir = debug_dir(root.path());
-    let store = DebugStore::load(root.path()).await;
+    let store = DebugStore::load_with_budget(root.path(), 1).await;
     // 加载之后再让 history.jsonl 变成目录，打开追加必然失败
     // （加载前就是目录的话，会被当成读不出来的文件挪开）
     std::fs::create_dir_all(dir.join(HISTORY_FILE)).unwrap();
@@ -1631,8 +1637,10 @@ async fn failed_append_keeps_entry_in_memory_and_reports_error() {
     assert!(err.contains("打开调用历史文件失败"), "{err}");
     // 本次运行里仍能查到
     assert_eq!(store.history(query()).await.total, 1);
-    let mem = store.history.lock().await;
-    assert!(!mem.entries[0].persisted);
+    assert_eq!(
+        store.history_entry("h1").await.unwrap().response,
+        Some(json!({"status": "ok"}))
+    );
 }
 
 #[tokio::test]

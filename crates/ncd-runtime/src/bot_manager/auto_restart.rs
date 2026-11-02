@@ -4,13 +4,19 @@
 
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Local, TimeZone};
 use croner::Cron;
 use ncd_domain::bot_config::{AutoRestartMode, AutoRestartSchedule, BotConfigError};
+use ncd_domain::{BotActorState, BotId};
+use ncd_traits::{BotConfigRepo, ConfigStore};
+use tracing::{info, warn};
 
-use super::*;
+use super::BotManager;
+use crate::events::{DomainEvent, DomainEventKind, EventBus, EventFilter};
+use crate::napcat::login_poller::RestartHandle;
 
 /// cron 最小粒度是分钟，30s 巡检的触发抖动可接受。
 pub const SCHEDULER_TICK: Duration = Duration::from_secs(30);

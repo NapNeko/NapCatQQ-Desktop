@@ -9,7 +9,7 @@ import { useMotion } from '../../../hooks/preferences/useMotion';
 import napcatPng from '../../../assets/napcat-symbol-48.png?inline';
 import type { UpdateAvailableItem } from '../../../core/domain/release/normalize';
 import { formatVersion } from '../../../core/domain/bootstrap/overviewFormat';
-import type { AppRoute } from '../../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../../core/domain/ui/route';
 
 export interface CoreCardsRowProps {
     napcatVersion: string | null;

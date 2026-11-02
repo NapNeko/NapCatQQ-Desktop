@@ -376,7 +376,7 @@ describe('screenshot draft lifecycle', () => {
         );
         expect(hook.result.current.capturing).toBe(true);
         hook.unmount();
-        store.releaseWhenIdle = true;
+        store.requestRelease(() => {});
         act(() =>
             screenshot.handler?.({
                 v: 1,
@@ -521,7 +521,7 @@ describe('screenshot draft lifecycle', () => {
             const complete = pendingCapture();
             const pending = captureChatScreenshot(store, 'private:12', options);
             if (reason === 'revision') store.viewRevision++;
-            if (reason === 'release') store.releaseWhenIdle = true;
+            if (reason === 'release') store.requestRelease(() => {});
             if (reason === 'identity') store.getSnapshot().account.selfId = '100';
             complete();
             await pending;

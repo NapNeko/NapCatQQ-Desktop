@@ -153,7 +153,7 @@ flowchart TB
 - 坑 3：列表性能。bot 数量到几十就有重渲染卡顿时上虚拟列表（`@tanstack/react-virtual` 已在依赖里，`shared/log/LogConsole.tsx` 在用），但 props 的 ViewModel 形状不要因此改变。
 - 坑 4：日志的环形缓冲。Bot 日志和应用端日志都走 `shared/log/LogConsole`，缓冲规则在 `core/domain/events/log-buffer.ts`。高频推行时在 hook / store 里攒批，别每行 setState 一次全量替换。
 - 坑 5：Tauri 拖拽区域。`shared/components/next/TitleBarChrome.tsx`、`Sidebar.tsx` 的 `data-tauri-drag-region="deep"` 属性不能丢，锁定版 SDK 会排除内部按钮；缩放热区另走原生 resize，不自行循环计算窗口尺寸。
-- 坑 6：路由切换徽章丢失。`AppNext.tsx` 的路由切换是 `displayedRoute + pageVisible` 双 state，路由切走整个 page unmount → hook 内部 `useReducer` state 清零 + 订阅取消，切回来时之前推过的 `BotOnline` / `LoginStateChanged` 已经过去了。修法：把"长期累积、跨路由保留"的聚合 state 做成模块级 store（第 11 节 + `hooks/utils/createStore.ts`），订阅在 store 第一次有 React 订阅者时挂一次，永远不卸载。新 hook 写之前自问：state 是"瞬时显示"（useReducer 没问题）还是"长期累积"（必须 store）。
+- 坑 6：路由切换徽章丢失。`app/routing/useAppNavigation.ts` 的路由切换是 `displayedRoute + pageVisible` 双 state，路由切走整个 page unmount → hook 内部 `useReducer` state 清零 + 订阅取消，切回来时之前推过的 `BotOnline` / `LoginStateChanged` 已经过去了。修法：把"长期累积、跨路由保留"的聚合 state 做成模块级 store（第 11 节 + `hooks/utils/createStore.ts`），订阅在 store 第一次有 React 订阅者时挂一次，永远不卸载。新 hook 写之前自问：state 是"瞬时显示"（useReducer 没问题）还是"长期累积"（必须 store）。
 - 坑 7：BotCard 固定高度遇到稀疏内容时下方留白严重。修法：自适应高度 + 普通状态文案合到副标题行（QQ ID · flavor · 时间 · 状态文案），只有错误 / 被踢这类高 priority 红色标签独占一行。操作区按钮按状态收缩：日志 / WebUI 只在 `running` / `starting` 显示。
 
 完成标志里「`grep -r 'core/services' src-ui/modules src-ui/shared` 为空」还没达到，剩的见第 2 节「现存偏差」。
@@ -187,7 +187,7 @@ flowchart TB
 
 | 页面 | 依赖 hook |
 | :--- | :--- |
-| `app/AppNext.tsx`（根上挂一次的桥和门） | `useComponentActionEventBridge` / `useDeploymentTaskBridge` / `useAppInstanceEventsBridge` / `useDockerInstallProgressBridge` / `useDockerDeployProgressBridge` / `useHostConnectionEvents` / `useHostHealthAlerts` / `useGlobalInfoBars` / `useBootstrap` / `useDesktopConsentGate` / `useOnboardingGate`；退出闸门 `DesktopExitGate` 用 `useDesktopExitGate` |
+| `app/desktop/AppBackgroundEffects.tsx`（应用事件和启动订阅）、`AppDesktopOverlays.tsx`（协议/入门/提示层） | `useComponentActionEventBridge` / `useDeploymentTaskBridge` / `useAppInstanceEventsBridge` / `useDockerInstallProgressBridge` / `useDockerDeployProgressBridge` / `useHostConnectionEvents` / `useHostHealthAlerts` / `useGlobalInfoBars` / `useBootstrap` / `useDesktopConsentGate` / `useOnboardingGate`；退出闸门 `DesktopExitGate` 用 `useDesktopExitGate` |
 | `BootstrapPanel` | `useBootstrap` / `useBackendSettings` / `useBotSnapshots` + `useBotConfigsMap` / `useReleases` / `useNoticeEvents` / `useServerManager` / `useOpenExternal` |
 | `RemoteHostPanel` | `useServerManager` |
 | `BotListPage` | `useBotSnapshots` / `useSortedBots` / `useSyncRemoteRuntimes` / `useBotMutations` / `useBotBatchSelection` / `useBotFlavorMap` / `useBotConfigsMap` / `useBotDockerStartGate` / `useBotRuntimeStartGate` / `useNapcatLogin`★ / `useSnowlumaState`★ / `useOpenWebui` / `useOpenSnowlumaNovnc` / `useBotSnapshotAlerts` |
@@ -196,7 +196,7 @@ flowchart TB
 | 调试台 `DebugConsolePage` | `useDebugTargets` / `useDebugChannels` / `useDebugCatalog` / `debugWorkspaceStore`★ / `debugEventStore`★ / `useDebugCall` / `useDebugContacts`，另有 `useDebugReceivers` / `useDebugCollections` / `useDebugHistory` / `useSaveResponse`（超大回包另存）/ `useDebugStorageNotices`；入口显隐问 `useDebugConsoleEnabled`（功能开关接缝，目前恒为开）。命令面板（Ctrl+K）是页面里的 `CommandPalette`，行的排序在 `core/domain/debug/palette.ts`，回车只打开不发送 |
 | 应用端列表 / 详情 | `useAppInstances` / `useAppFrameworks` / `useServerManager`；详情各 Tab 按框架取 `useAppInstanceConfig` / `useAppConfigForm` / `useAppStore` / `useKarinPlugins` / `useAstrBot*` / `useMaiBot*`，日志 `useAppInstanceLog`，对接 `useAppLinkPlan` / `useApplyAppLink` |
 
-调试台的入口不在页面内：Bot 卡片「调试」和右键「在调试台打开」调 `hooks/debug/debugNav.ts` 的 `openDebugConsole(botId)`，由 `app/AppNext.tsx` 启动时 `registerDebugNavigator` 注册跳转（hooks 层不能反向 import 路由壳）；目标 Bot 先记成「待选」，调试台挂载后 `consumePendingDebugBot` 取走。这就是「从别的页面带着参数跳进某页」的桥：hooks 里放一个注册点 + 待取的参数，路由壳注册跳转、目标页挂载时取走；页面还没加载（lazy）或正在显示空状态时参数都不会丢。以后别的功能要这么跳，照它写，不要让 modules 互相 import 页面。
+调试台的入口不在页面内：Bot 卡片「调试」和右键「在调试台打开」调 `hooks/debug/debugNav.ts` 的 `openDebugConsole(botId)`，由 `app/routing/useAppNavigation.ts` 挂载时 `registerDebugNavigator` 注册跳转（hooks 层不能反向 import 路由壳）；目标 Bot 先记成「待选」，调试台挂载后 `consumePendingDebugBot` 取走。这就是「从别的页面带着参数跳进某页」的桥：hooks 里放一个注册点 + 待取的参数，路由壳注册跳转、目标页挂载时取走；页面还没加载（lazy）或正在显示空状态时参数都不会丢。以后别的功能要这么跳，照它写，不要让 modules 互相 import 页面。
 
 ★ 标记的 hook 是模块级 store 视图（`napcatLoginStore` / `snowlumaStore` / 调试台的 `debugEventStore` / `debugWorkspaceStore`），跨路由保留 state，事件订阅一次永不卸载（调试台的事件走 `Channel` 按 Bot 订阅，离开页面、换 Bot 时 `releaseView` 退订，后端据此算「没人看」、30 分钟后停收）。其它"长期累积聚合"hook 也应这么写，参考第 7 节坑 6。
 
@@ -209,7 +209,7 @@ flowchart TB
 三件套（路径 `src-ui/hooks/ui/`）：
 - `globalInfoBarStore.ts`：模块级单例 store。`push(opts)` 返回 id，可选 `key` 字段做"同 key 顶替"。导出 `pushInfoBar` / `dismissInfoBar` 顶层方法供非 React 代码直接调用；按 key 收掉一条用 `` dismissInfoBar(`key:${key}`) ``。
 - `useGlobalInfoBars.ts`：React hook，返回 `{ bars, push, dismiss, remove }`，`useSyncExternalStore` 订阅 store。
-- `app/AppNext.tsx`：顶层挂一次 `<InfoBarStack items={bars} onDismiss={dismiss} onAutoDismiss={remove} />`，整个 App 唯一渲染处。跨路由切换 banner 不丢。
+- `app/desktop/AppDesktopOverlays.tsx` 的 `AppNotifications`：顶层挂一次 `<InfoBarStack items={bars} onDismiss={dismiss} onAutoDismiss={remove} />`，整个 App 唯一渲染处。跨路由切换 banner 不丢。
 
 报错统一用 `pushErrorBar`（`hooks/ui/pushErrorBar.ts`）：传 `title` + 后端原话 `raw`，原话进 console，条上的正文由 `core/domain/ui/errorBarCopy.ts` 压成一句人话。
 
@@ -313,11 +313,25 @@ React 端用法统一：
 
 ### 高频视图与状态边界
 
-聊天账号的连接、档案和分页仍由 `hooks/chat/chatStore.ts` 管理；发送、重试、撤回和转发归 `chatMessageActions.ts`，图片引用的缓存与传输转换归 `chatMediaCodec.ts`，共用类型位于 `chatStore.types.ts`。动作读取当前快照与连接代次，避免抽取模块后捕获旧账号状态。
+`app/AppNext.tsx` 只组合布局、侧栏和各生命周期入口：`routing/useAppNavigation.ts` 拥有目标页/显示页、退场切换、功能门禁及独立窗口让位；`AppRoutes.tsx` 渲染页面，任务查询只随任务页订阅；`pageLoaders.ts` 让懒加载与悬停预加载使用同一工厂。`desktop/AppBackgroundEffects.tsx` 拥有应用事件与启动订阅；`AppDesktopOverlays.tsx` 拥有协议、入门与引导状态，提示条自行订阅，不再驱动整个主壳刷新。页面和 hooks 直接从 `core/domain/ui/route.ts` 引用路由类型，不能通过 Sidebar 反向依赖呈现组件。
 
-`useChatSelector` 供界面选择所需字段；`modules/chat/chatViewSelectors.ts` 定义工作区和时间线的比较规则。草稿、上传进度和消息列表各自刷新。消息与档案数组未变时不重新扫描图片引用，群成员检索复用小写索引并在 30 条命中后停止；`TimelineMessage.tsx` 独立渲染消息行，缺口加载回调保持稳定。
+聊天的公共入口 `hooks/chat/chatStore.ts` 只导出稳定 API；实现归 `hooks/chat/store/`，内部模块不回引入口。职责分配如下：
 
-Bot 卡片的指标订阅位于 `BotCardMetrics.tsx`，轮询只更新指标区域；工具栏和右键菜单在 `BotCardActions.tsx` 共享操作状态。身份配置由 `IdentityTab.tsx` 组合账号、运行宿主、自愈三个区域；只读主机列表使用 `hooks/remote/useServers.ts`，避免为表单建立 CRUD mutation observers。
+| 所有者 | 负责内容 |
+|---|---|
+| `ChatAccountStore` | 组合账号服务、初始化及释放的协调；对外保留原调用方式 |
+| `ChatAccountState` / `ChatSession` | 唯一可观察快照 / 当前连接代次、目标与协议请求 |
+| `ChatConversationActions` | 会话打开、草稿、已读与置顶命令；统一桌面已读通知 |
+| `ChatTimeline` / `ChatHistory` | 阅读位置、分页锚点与工作集 / 历史请求和补页 |
+| `ChatArchive` | 恢复、脏标记、串行保存与释放前落盘 |
+| `ChatConnection` / `ChatDirectory` | 订阅、重连 / 联系人与群成员请求 |
+| `ChatOperations` / `ChatSendQueue` | 操作锁与空闲通知 / 发送流水线与进度 |
+| `ChatMessageActions` / `ChatForwarding` | 消息命令 / 合并转发与目标处理 |
+| `chatRegistry` | 账号索引、窗口视图及交接；不直接修改账号内部状态 |
+
+`useChatSelector` 供界面选择所需字段；`modules/chat/chatViewSelectors.ts` 定义工作区和时间线的比较规则。草稿、上传进度和消息列表各自刷新。消息与档案数组未变时不重新扫描图片引用，群成员检索复用小写索引并在 30 条命中后停止；`TimelineMessage.tsx` 独立渲染消息行，缺口加载回调保持稳定。`ChatComposer.tsx` 只协调发送、焦点和折叠，`composer/` 的草稿访问、附件输入、提及控制、编辑器及工具栏各自管理生命周期；异步附件输入绑定发起时的会话并合并它的最新草稿。
+
+Bot 卡片由 `BotCard` 组合 `BotCardHeader`、`BotCardActions`、`BotCardDialogs` 和独立订阅的 `BotCardMetrics`。`useBotCardController` 负责能力探测、动作执行和弹窗状态；纯规则 `core/domain/bot/card-actions.ts` 生成唯一操作模型，工具栏与右键菜单共享可用性和禁用状态。身份配置由 `IdentityTab.tsx` 组合账号、运行宿主、自愈区域；`runtime-selection.ts` 负责主机/部署选择规则，`useIdentityRuntimeSelection` 负责数据适配，容器设置与原生提示各自拥有探测订阅。只读主机列表使用 `hooks/remote/useServers.ts`，避免为表单建立 CRUD mutation observers。
 
 保留页面、列表、卡片和附件进退场。数字滚动 `Counter` 在值更新、关闭动效或卸载时回收上一轮 GSAP 动画与旧数字，避免连续更新叠加动画。
 
@@ -360,10 +374,10 @@ Body 一定要在 `style={{ visibility: 'hidden', opacity: 0 }}` 起始态，避
 
 ### 接入约定 / 已落地点
 
-- 路由切换 ✓ AppNext 的 `displayedRoute + pageVisible` 双 state pattern：route 变 → pageVisible=false 跑 exit → onExited 切 displayedRoute + 设 visible=true
+- 路由切换 ✓ `useAppNavigation` 的 `displayedRoute + pageVisible` 双 state pattern：route 变 → pageVisible=false 跑 exit → onExited 切 displayedRoute + 设 visible=true
 - 列表 stagger ✓ BotListPage / DockerPage / RemoteHostPanel 用 `useGSAP(() => gsap.from(containerRef.current.children, { stagger, ... }))` + `dependencies: [items.length, m.enabled, ...]`
 - 按钮弹性 ✓ Button.tsx 内挂 mouseenter/leave/down/up 用 gsap.to 控制 scale；`flat=true` 关闭
-- IconButton（BotCard） ✓ forwardRef 让 GsapPresence 拿 ref；按钮按 visible 进退场（QrCode / Play↔Square / 日志 / WebUI）
+- IconButton（BotCard） ✓ 按动作可用性挂载，rich 档绑定 GSAP hover，卸载时清理绑定与 tween；徽章状态 pop 由 `useBotStatusBadgeMotion` 管理
 - Dialog 进退场 ✓ Radix forceMount + 两块 GsapPresence 各管 overlay/content
 - InfoBar 进退场 ✓ InfoBarStack 自管 displayed 列表，每条用 GsapPresence + onExited 清理
 - Tabs 内容切换 ✓ TabsContent 读 ActiveValueContext，GsapPresence 控 mount + GSAP fade+slide-x

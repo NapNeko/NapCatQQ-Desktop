@@ -23,7 +23,7 @@ import { HelloCard } from './widgets/HelloCard';
 import { RemoteSummaryCard } from './widgets/RemoteSummaryCard';
 import { NoticeTimelineCard } from './widgets/NoticeTimelineCard';
 import { CoreCardsRow } from './widgets/CoreCardsRow';
-import type { AppRoute } from '../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../core/domain/ui/route';
 
 export interface BootstrapPanelNextProps {
     onNavigate?: (route: AppRoute) => void;

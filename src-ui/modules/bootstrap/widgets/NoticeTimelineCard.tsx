@@ -18,7 +18,7 @@ import { animateListChildrenEnterAfterPaint } from '../../../shared/ui/motion/li
 import { useOpenExternal } from '../../../hooks/useOpenExternal';
 import type { NoticeItem, NoticeTone } from '../../../core/domain/events/notice-aggregator';
 import { formatRelativeNoticeTime } from '../../../core/domain/bootstrap/overviewFormat';
-import type { AppRoute } from '../../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../../core/domain/ui/route';
 
 const TONE_VISUAL: Record<
     NoticeTone,

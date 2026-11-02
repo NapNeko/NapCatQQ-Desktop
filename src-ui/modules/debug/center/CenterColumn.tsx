@@ -14,7 +14,7 @@ import {
 } from 'react';
 import { ChevronDown, ChevronUp, FilePlus2, Info, Search } from 'lucide-react';
 import { Button } from '../../../shared/ui';
-import type { AppRoute } from '../../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../../core/domain/ui/route';
 import { cn } from '../../../shared/utils/cn';
 import { useMotion } from '../../../hooks/preferences/useMotion';
 import {

@@ -1,6 +1,11 @@
 //! 桌面退出和完整关闭的资源清理。
 
-use super::*;
+use super::{BatchResult, BotManager};
+use crate::bot_actor::{BotActorHandle, BotActorSnapshot};
+use ncd_domain::ids::BotId;
+use ncd_traits::{BotConfigRepo, ConfigStore};
+use std::collections::HashSet;
+use tracing::info;
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 桌面进程退出:仅停止本机 Bot;远端(Docker / 直接运行)不停远端进程,只拆掉本机隧道/日志会话

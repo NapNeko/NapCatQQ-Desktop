@@ -45,7 +45,7 @@ import { hostIdDisplayLabel, isAppHostRemoved } from '../hostLabel';
 import { STATE_META, isInstalled } from '../../../core/domain/apps/instanceState';
 import { CardInstallProgress } from '../InstallProgress';
 import { FloatingActions } from './FloatingActions';
-import type { AppRoute } from '../../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../../core/domain/ui/route';
 import type { AppFrameworkManifest, AppInstance } from '../../../core/ipc/types';
 import gridStyles from './appCardGrid.module.css';
 

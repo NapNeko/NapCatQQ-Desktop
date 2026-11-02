@@ -28,7 +28,7 @@ import {
 import { HeroSky } from './HeroSky';
 import { HeroTitle } from './HeroTitle';
 import { HeroMascot, type MascotReaction } from './HeroMascot';
-import type { AppRoute } from '../../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../../core/domain/ui/route';
 
 export interface HelloCardProps {
     fleet: BotFleetStats;

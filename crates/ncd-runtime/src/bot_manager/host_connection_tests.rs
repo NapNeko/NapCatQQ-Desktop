@@ -1,10 +1,25 @@
 // 主机连接监听的订阅就绪、断线清理与连续重连顺序回归。
 
-use super::*;
-use crate::{HostResolveError, HostResolver};
+use std::sync::Arc;
+use std::time::Duration;
+
+use async_trait::async_trait;
 use ncd_domain::{BackendKind, BotFlavor};
+use ncd_domain::{
+    BackendType, BotConfig, BotConfigError, BotId, DesktopNotifySettings, RuntimeTarget, StopMode,
+    WebUiPollerSettings,
+};
+use ncd_traits::BotConfigRepo;
+use ncd_traits::runtime_backend::{BotBackend, BotBackendError, BotStartCtx};
 use ncd_traits::runtime_backend::{BotStatus, LogSnapshot, TailOpts};
+use tokio::sync::{Mutex, RwLock};
 use tokio::sync::{mpsc, oneshot};
+
+use crate::bot_actor::BotActorHandle;
+use crate::bot_manager::{BotManager, BotManagerError};
+use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
+use crate::runtime_router::RuntimeRouterError;
+use crate::{HostResolveError, HostResolver};
 
 struct FixedBotRepo(BotConfig);
 

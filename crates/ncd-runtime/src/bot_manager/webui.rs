@@ -1,4 +1,7 @@
-use super::*;
+use ncd_domain::{BackendType, BotId, RuntimeScenario};
+use ncd_traits::{BotConfigRepo, ConfigStore};
+
+use super::{BotManager, BotManagerError};
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 准备 WebUI 入口，不尝试登录或恢复 QQ 图形会话。

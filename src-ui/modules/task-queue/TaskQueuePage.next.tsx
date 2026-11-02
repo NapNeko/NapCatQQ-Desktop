@@ -5,7 +5,7 @@ import { Trash2 } from 'lucide-react';
 import { cn } from '../../shared/utils/cn';
 import type { TaskQueueItem } from '../../core/domain/task-queue/types';
 import { isActiveTaskItem } from '../../core/domain/task-queue/display';
-import type { AppRoute } from '../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../core/domain/ui/route';
 import { TaskQueueListItem } from './TaskQueueListItem';
 import { TaskDetailPanel } from './TaskDetailPanel';
 import { TaskQueueEmptyState } from './TaskQueueEmptyState';

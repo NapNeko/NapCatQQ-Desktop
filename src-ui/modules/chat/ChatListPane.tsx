@@ -4,7 +4,7 @@ import { ArrowLeft, ChevronRight, Inbox, Mail, RefreshCw, Search, X } from 'luci
 import type { ChatAccountStore, ChatSnapshot } from '../../hooks/chat/chatStore';
 import type { Contact, Conversation, SessionKey } from '../../core/domain/chat/model';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
-import type { AppRoute } from '../../shared/components/next/Sidebar';
+import type { AppRoute } from '../../core/domain/ui/route';
 import type { SelectItem } from '../../shared/ui/Select';
 import { Button } from '../../shared/ui/Button';
 import { ActionMotionIcon } from '../../shared/ui/motion/ActionMotionIcon';

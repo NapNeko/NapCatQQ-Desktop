@@ -1,5 +1,5 @@
-import { debugErrorCopy } from '../../core/domain/debug/errorCopy';
-import type { DebugCallResponse } from '../../core/ipc/generated/debug/DebugCallResponse';
+import { debugErrorCopy } from '../../../core/domain/debug/errorCopy';
+import type { DebugCallResponse } from '../../../core/ipc/generated/debug/DebugCallResponse';
 
 export function dataOf(response: DebugCallResponse): unknown {
     if (response.result.kind === 'err') {
