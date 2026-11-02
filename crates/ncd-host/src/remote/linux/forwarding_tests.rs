@@ -202,6 +202,18 @@ impl Drop for Fixture {
     }
 }
 
+async fn assert_stream_closed(stream: &mut TcpStream) {
+    let result = tokio::time::timeout(Duration::from_secs(2), stream.read(&mut [0u8; 1]))
+        .await
+        .expect("隧道关闭后 TCP 流应及时断开");
+    // 取消转发时，Windows 可能通过 TCP reset 而不是 EOF 报告断开。
+    assert!(
+        matches!(result, Ok(0))
+            || matches!(result, Err(ref error) if error.kind() == std::io::ErrorKind::ConnectionReset),
+        "隧道关闭后收到意外结果: {result:?}"
+    );
+}
+
 #[tokio::test]
 async fn stalled_forward_confirmation_does_not_block_control_or_tunnel_close() {
     let fixture = Fixture::new().await;
@@ -226,7 +238,7 @@ async fn stalled_forward_confirmation_does_not_block_control_or_tunnel_close() {
     tokio::time::timeout(Duration::from_secs(1), tunnel.close_and_wait())
         .await
         .unwrap();
-    assert_eq!(stream.read(&mut [0u8; 1]).await.unwrap(), 0);
+    assert_stream_closed(&mut stream).await;
     assert_eq!(fixture.state.connections.load(Ordering::SeqCst), 2);
     assert!(fixture.host.is_healthy().await);
     fixture.state.stall.store(false, Ordering::SeqCst);
@@ -266,7 +278,7 @@ async fn stalled_forward_confirmation_times_out_and_invalidates_its_leases() {
         .unwrap();
     assert!(tunnel.is_closed());
     assert!(fixture.host.is_healthy().await);
-    assert_eq!(stream.read(&mut [0u8; 1]).await.unwrap(), 0);
+    assert_stream_closed(&mut stream).await;
 }
 
 #[tokio::test]
@@ -289,7 +301,7 @@ async fn tunnel_close_reclaims_an_active_ssh_stream_and_next_lease_reuses_transp
             .unwrap();
         assert_eq!(&response, b"ping");
         tunnel.close_and_wait().await;
-        assert_eq!(stream.read(&mut response).await.unwrap(), 0);
+        assert_stream_closed(&mut stream).await;
     }
     assert_eq!(fixture.state.connections.load(Ordering::SeqCst), 2);
     tokio::time::timeout(Duration::from_secs(2), async {
