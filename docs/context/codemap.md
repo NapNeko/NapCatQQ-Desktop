@@ -183,7 +183,7 @@ KB：`.claude/kb/snowluma-runtime.md`, `snowluma-docker.md`
 
 | 关注点 | 主路径 |
 |--------|--------|
-| ServerManager / 健康探活 | `crates/ncd-server/src/server_manager.rs`（`ncd_runtime::server_manager` re-export） |
+| ServerManager / 会话内核 | `crates/ncd-server/src/server_manager.rs` + `session_kernel.rs`：单一连接登记、建连单飞、代次与 watch 快照；恢复请求仅唤醒 Bot 接管，资源变更才使消费者重新连接。`ncd_runtime::server_manager` re-export |
 | 凭据同步 | `crates/ncd-server/src/credential_sync.rs` |
 | SSH keygen | `crates/ncd-server/src/ssh_keygen.rs` |
 | 本机 SSH config 发现 | `crates/ncd-server/src/ssh_config.rs` + `discover_local_ssh_hosts`；UI `ImportSshConfigDialog` |
@@ -191,6 +191,7 @@ KB：`.claude/kb/snowluma-runtime.md`, `snowluma-docker.md`
 | 远端默认布局 / Docker 目录 | `ncd-domain/remote_paths.rs`（`desktop_default_install_paths`、`docker_bot_project_dir`）；Bot 容器可能叫的名字 `ncd-deploy/src/deployments/docker.rs` 的 `bot_docker_container_candidates` |
 | Host 解析 | `crates/ncd-server/src/host_resolver.rs`, `src-tauri/src/bot_host_resolver.rs`；host_id ↔ server_id 用 `ncd-domain/app_framework.rs` 的 `server_id_of_host` / `host_id_of_runtime_target` |
 | Host 抽象 | `crates/ncd-host/src/host.rs`（`which` / `command_exists` / `rename` / `file_size` / `open_pty` / `list_drives`…）, `local/`, `remote/` |
+| SSH 转发生命周期 | `ncd-host/src/remote/linux/forwarding.rs`：按需独立转发 transport，通道建立有期限，正反向流归监听任务回收；`TunnelHandle` 持有使用权，连接失效立即可见。`Host::transport_changes` 接入会话内核，控制连接不随转发失败退出 |
 | known_hosts | 行解析和主机匹配 `crates/ncd-host/src/remote/host_key.rs`（`parse_known_hosts_line` / `known_hosts_host_matches`）；从本机 OpenSSH 抄指纹 `crates/ncd-server/src/openssh_known_hosts.rs` |
 | Server profile 迁移 | `crates/ncd-server/src/server_profile_migration.rs` |
 | Tauri | `src-tauri/src/commands/servers.rs`, `host_resolve.rs` |
@@ -365,7 +366,7 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 | WebUI | `manager/webui.rs` + 适配器 `read_webui_endpoint`；只读取监听端口和登录密钥，每次打开重新读取；远端通过 SSH 隧道连接本机回环口；AstrBot 账号查看与重置保留 |
 | 一键对接 | `manager/link.rs`、`manager/tunnel.rs`、`resident_link.rs`、`docker_link.rs`；Bot 侧按 `ncd-app:<instance_id>` upsert WebSocket 连接并走既有热推；应用端只写对接字段，保留备份及失败回滚 |
 | 框架文件 | 各框架 `config.rs` / `config/` 只保留安装、导入、对接或退出所需的读取；Koishi `yml.rs`、`live.rs`、`console.rs` 用于运行中对接；NeoBot `control.rs` 用于优雅关闭 |
-| 原文编辑 | `manager/config_files.rs` + `config_doc.rs`：按适配器文档清单读写，语法检查、版本冲突与失败回滚；只保存用户原文，不恢复类型化表单或自动重新对接 |
+| 原文编辑 | `manager/config_files.rs` + `config_doc.rs`：按适配器文档清单读写，读取含排队总期限 8 秒；`manager/config_gate.rs` 按实例协调、共享 Bot 对接事务按 Bot 排序加锁，维护期间拒绝新冲突操作。保留版本冲突、回滚与草稿；只保存用户原文，不自动重新对接 |
 | 备份与迁移 | `ncd-appframework/src/config_backup.rs`、`config_doc.rs`、`adopt.rs`；`manager/config_backup.rs`、`manager/migration_apps.rs`；框架配置仍可随配置 ZIP 备份与恢复 |
 | Tauri IPC | `src-tauri/src/commands/app_framework.rs`：实例、安装、配置文件列表/原文读写、日志、对接、WebUI、版本与条款命令；不提供框架业务 API 代理 |
 | 前端 | `src-ui/modules/apps/AppsPage.next.tsx` → `list/AppInstanceListPage.tsx` / `detail/AppInstancePage.next.tsx`；默认 `InstanceConfigEditor.tsx`，另含日志、可选版本；顶部 `DetailHeader.tsx` 提供 WebUI 与一键对接 |
@@ -449,7 +450,7 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 | 窗口 / 账号托盘 | `ncd-domain/src/chat_desktop.rs` → `ncd-runtime/src/chat/{desktop,inbox}.rs`：按 Bot+QQ 默认关闭后台/托盘，最多 8 个后台账号、9 个完整收件箱（每个消息体缓存 2 MiB），暂停后只保留有界未读摘要。`src-tauri/src/{chat_window,chat_tray}.rs` 管单实例 `chat-panel`、带确认/取消的草稿交接、独立 QQ 头像托盘与控制台回收；头像异步下载、最多 4 并发，不创建后台 WebView。`chat.html` / `chat-main.ts` / `app/startChat.tsx` 为独立构建入口，工具标题栏不加载终端；`ChatPopoutApp` / `ChatAccountControls` / `chat-desktop.service` 为前端入口；视图保存校验窗口所有者和挂载代次，关闭后销毁聊天 WebView |
 | 新消息提示 / 群忽略 | `chat/notifications.rs` 把 QQ `GroupMsgMask` 与账号本地 `ignoredGroups` / `hiddenGroups` 合并，消息与普通未读继续保留，`notificationUnread` 单独控制托盘。NapCat 的 `get_group_detail_info` 按需读取，最多 4 并发、成功缓存 5 分钟；SnowLuma 当前不返回 QQ 档位，未知群默认不提示，账号设置可显式开启。`useChatNotifications` + 会话右键保存本地免打扰、迁移既有隐藏群。聊天设置提供免打扰群恢复与提醒预览；托盘默认静态红点，可选头像闪烁（600ms 明暗切换，两帧预计算）或关闭，只有需要提醒时才运行计时器。托盘头像有透明圆角，128px 原图复用于聊天窗标题、任务栏和 Alt+Tab |
 | 账号托盘菜单 / 未读预览 | `src-tauri/src/chat_tray_panel_native.rs` 经 `native_panel/` 绘制，所有账号共用一个原生窗口。Windows 图标中心固定锚点，Enter/Move 共用可取消的 500ms 悬停请求；重复悬停不重开。右键在同一窗口内将预览切为账号菜单，内容交叉淡入淡出；已打开菜单时重复右键只恢复焦点。Windows 预览不抢焦点，离开图标和面板 320ms 后关闭；Linux 只使用 AppIndicator，系统菜单保留账号面板和未读预览入口，拿焦点后通过 Escape / 失焦收起。X11 面板按事件位置和工作区定位，Wayland 面板由合成器放置。runtime tray_snapshot 沿用群免打扰策略，展开/关闭带代次，过期快照丢弃；预览不标已读，账号托盘关闭后收起已有面板。点击会话通过 ChatTrayNavigation 在档案恢复后定位会话 |
-| 远端聊天恢复 | `onebot_debug/port.rs` 的 `recover_webui` 由 `bot_manager/debug_port.rs` 实装：缺少远端 WebUI 端点时单飞取得活 SSH 并复用运行态接管，独立任务不被接收器连接超时半途取消；保留 ServerManager 冷却限制，不启动新 Bot。SSH 恢复事件唤醒接收器，后台租约每 15 秒重新核对停止状态 |
+| 远端聊天恢复 | `onebot_debug/port.rs` 的 `recover_webui` 由 `bot_manager/debug_port.rs` 实装：端点缺失或缓存端点连接失败时向会话内核请求恢复；`bot_manager/host_recovery.rs` 拥有按主机串行的接管任务，换代取消旧恢复。Chat/Debug 订阅资源快照，不把恢复请求当成重连完成，不依赖通用广播收到每次 SSH 事件；保留现有消息序号、Gap、草稿与发送结果未知语义 |
 | IPC / 预览 | `src-tauri/src/commands/chat.rs`：`chat_targets/call/call_stream/subscribe/unsubscribe` 与 `chat_archive_load/save`；前端 `core/services/chat.service.ts` / `chat-archive.service.ts`，档案类型来自 `generated/chat/`。`core/ipc/mock/chat.mock.ts` 提供多页历史，`chat-archive.mock.ts` 仅在浏览器预览用 localStorage 模拟存储。`lib.rs` 接 Bot 生命周期、页面重载清理；`commands/exit.rs` 统一释放聊天连接 |
 | 复用边界 | 复用 debug 的 BotPicker、消息段解析、@ 组装、SegmentList 与虚拟列表贴底；弹层使用 shared/ui/Popover；不导入 DebugConsolePage 或调试工作区 store |
 
