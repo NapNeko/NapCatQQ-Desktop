@@ -7,23 +7,15 @@ import type { DebugEvent } from '../../../core/ipc/generated/debug/DebugEvent';
 import type { DebugEventBatch } from '../../../core/ipc/generated/debug/DebugEventBatch';
 import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
 
-const service = {
+const service = vi.hoisted(() => ({
     subscribe: vi.fn(),
     unsubscribe: vi.fn(),
     call: vi.fn(),
     describe: vi.fn(),
-};
+}));
 
 vi.mock('../../../core/services/onebot-debug.service', () => ({
-    onebotDebugService: new Proxy(
-        {},
-        {
-            get:
-                (_t, key: string) =>
-                (...args: unknown[]) =>
-                    (service as Record<string, (...a: unknown[]) => unknown>)[key](...args),
-        },
-    ),
+    onebotDebugService: service,
 }));
 vi.mock('../../../hooks/ui/pushErrorBar', () => ({ pushErrorBar: vi.fn() }));
 
@@ -60,10 +52,6 @@ beforeAll(() => {
         configurable: true,
         get: () => 380,
     });
-    Element.prototype.hasPointerCapture ??= () => false;
-    Element.prototype.releasePointerCapture ??= () => {};
-    Element.prototype.setPointerCapture ??= () => {};
-    Element.prototype.scrollIntoView ??= () => {};
 });
 
 afterAll(() => {

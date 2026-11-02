@@ -2,7 +2,7 @@ import { useState } from 'react';
 import userEvent from '@testing-library/user-event';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import gsap from 'gsap';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultBotConfig } from '../../../../core/domain/bot/config-defaults';
 import { IdentityTab } from './IdentityTab';
 
@@ -46,12 +46,6 @@ function finishMotion() {
         gsap.globalTimeline.getChildren().forEach((animation) => animation.totalProgress(1));
     });
 }
-
-beforeAll(() => {
-    Element.prototype.hasPointerCapture ??= () => false;
-    Element.prototype.releasePointerCapture ??= () => {};
-    Element.prototype.scrollIntoView ??= () => {};
-});
 
 afterEach(cleanup);
 

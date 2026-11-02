@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -9,26 +9,15 @@ import type { DebugCollections } from '../../../core/ipc/generated/debug/DebugCo
 import type { DebugSavedRequest } from '../../../core/ipc/generated/debug/DebugSavedRequest';
 import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
 
-const service: Record<string, ReturnType<typeof vi.fn>> = {
+const service = vi.hoisted(() => ({
     collections: vi.fn(),
     saveCollections: vi.fn(),
     catalog: vi.fn(),
     call: vi.fn(),
-};
+}));
 
 vi.mock('../../../core/services/onebot-debug.service', () => ({
-    onebotDebugService: new Proxy(
-        {},
-        {
-            get:
-                (_t, key: string) =>
-                (...args: unknown[]) => {
-                    const fn = service[key];
-                    if (!fn) throw new Error(`没有模拟 service.${key}`);
-                    return fn(...args);
-                },
-        },
-    ),
+    onebotDebugService: service,
 }));
 vi.mock('../../../hooks/ui/pushErrorBar', () => ({ pushErrorBar: vi.fn() }));
 
@@ -38,12 +27,6 @@ import { debugWorkspaceStore } from '../../../hooks/debug/debugWorkspaceStore';
 import { _resetDebugCatalogForTests } from '../../../hooks/debug/useDebugCatalog';
 import { _resetDangerSkipsForTests, dangerConfirmSkipped } from '../DangerConfirmDialog';
 import { LeftColumn } from './LeftColumn';
-
-beforeAll(() => {
-    Element.prototype.hasPointerCapture ??= () => false;
-    Element.prototype.releasePointerCapture ??= () => {};
-    Element.prototype.setPointerCapture ??= () => {};
-});
 
 const SL: DebugTarget = {
     bot_id: 'bot-sl',

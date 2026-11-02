@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import gsap from 'gsap';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { preferencesStore } from '../../core/domain/settings/preferencesStore';
 import { Select } from './Select';
 
@@ -13,13 +13,6 @@ const ITEMS = [
 function renderSelect() {
     return render(<Select items={ITEMS} value="a" onValueChange={() => {}} />);
 }
-
-// Radix Select 打开时会用到这几个 jsdom 没有的 DOM API
-beforeAll(() => {
-    Element.prototype.hasPointerCapture ??= () => false;
-    Element.prototype.releasePointerCapture ??= () => {};
-    Element.prototype.scrollIntoView ??= () => {};
-});
 
 afterEach(() => {
     cleanup();

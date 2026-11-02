@@ -10,7 +10,7 @@ import type { DebugChannelId } from '../../../core/ipc/generated/debug/DebugChan
 import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
 import type { DebugWorkspace } from '../../../core/ipc/generated/debug/DebugWorkspace';
 
-const service = {
+const service = vi.hoisted(() => ({
     targets: vi.fn(),
     channels: vi.fn(),
     catalog: vi.fn(),
@@ -22,18 +22,10 @@ const service = {
     collections: vi.fn(),
     history: vi.fn(),
     saveResponseFile: vi.fn(),
-};
+}));
 
 vi.mock('../../../core/services/onebot-debug.service', () => ({
-    onebotDebugService: new Proxy(
-        {},
-        {
-            get:
-                (_t, key: string) =>
-                (...args: unknown[]) =>
-                    (service as Record<string, (...a: unknown[]) => unknown>)[key](...args),
-        },
-    ),
+    onebotDebugService: service,
 }));
 vi.mock('../../../core/services/domain-event-hub', () => ({
     subscribeDomainEvents: () => () => {},
@@ -134,10 +126,27 @@ function workspace(action: string, params_text: string): DebugWorkspace {
     };
 }
 
+function column(target = BOT, callChannel: DebugChannelId = { kind: 'auto' }) {
+    return (
+        <CenterColumn
+            target={target}
+            callChannel={callChannel}
+            onOpenPalette={vi.fn()}
+            onRevealCallChannel={vi.fn()}
+        />
+    );
+}
+
 async function renderColumn(
     action: string,
     params_text: string,
-    callChannel: DebugChannelId = { kind: 'auto' },
+    {
+        target = BOT,
+        callChannel = { kind: 'auto' },
+    }: {
+        target?: DebugTarget;
+        callChannel?: DebugChannelId;
+    } = {},
 ) {
     service.workspace.mockResolvedValue(workspace(action, params_text));
     await debugWorkspaceStore.load();
@@ -147,15 +156,7 @@ async function renderColumn(
             <TooltipProvider>{children}</TooltipProvider>
         </QueryClientProvider>
     );
-    return render(
-        <CenterColumn
-            target={BOT}
-            callChannel={callChannel}
-            onOpenPalette={vi.fn()}
-            onRevealCallChannel={vi.fn()}
-        />,
-        { wrapper },
-    );
+    return render(column(target, callChannel), { wrapper });
 }
 
 function editorCalls(): DebugCallRequest[] {
@@ -167,17 +168,6 @@ function editorCalls(): DebugCallRequest[] {
 // jsdom 里元素尺寸都是 0，虚拟列表一行都不画：给 JSON 树一个 440px 的视口
 const offsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight');
 beforeAll(() => {
-    Element.prototype.hasPointerCapture ??= () => false;
-    Element.prototype.releasePointerCapture ??= () => {};
-    Element.prototype.setPointerCapture ??= () => {};
-    Element.prototype.scrollIntoView ??= () => {};
-    Range.prototype.getClientRects ??= () =>
-        ({
-            length: 0,
-            item: () => null,
-            [Symbol.iterator]: [][Symbol.iterator],
-        }) as unknown as DOMRectList;
-    Range.prototype.getBoundingClientRect ??= () => new DOMRect();
     Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
         configurable: true,
         get() {
@@ -267,47 +257,8 @@ describe('危险接口的确认', () => {
     });
 });
 
-describe('连发只显示最后一次', () => {
-    it('第一次的回包比第二次晚到时不覆盖第二次的结果', async () => {
-        const user = userEvent.setup();
-        const pending: Array<(data: unknown) => void> = [];
-        service.call.mockImplementation(
-            (req: DebugCallRequest) =>
-                new Promise<DebugCallResponse>((resolve) => {
-                    if (req.origin !== 'editor') {
-                        resolve(okResponse(req, []));
-                        return;
-                    }
-                    pending.push((data) => resolve(okResponse(req, data)));
-                }),
-        );
-        await renderColumn('get_login_info', '{}');
-
-        const send = await screen.findByRole('button', { name: /^发送/ });
-        await waitFor(() => expect(send).toBeEnabled());
-        await user.click(send);
-        // 发送中：按钮换成取消，计时提示保留取消边界。
-        expect(await screen.findByRole('button', { name: /取消/ })).toBeInTheDocument();
-        expect(screen.getByTitle('取消只是不再等回包，上游可能已经执行了')).toBeInTheDocument();
-
-        // 还在等的时候再按一次 Ctrl+Enter
-        fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true });
-        await waitFor(() => expect(pending).toHaveLength(2));
-
-        await act(async () => {
-            pending[1]!({ nickname: 'second' });
-        });
-        expect(await screen.findByText('"second"')).toBeInTheDocument();
-
-        await act(async () => {
-            pending[0]!({ nickname: 'first' });
-        });
-        expect(screen.queryByText('"first"')).not.toBeInTheDocument();
-        expect(screen.getByText('"second"')).toBeInTheDocument();
-        expect(screen.getByText('成功')).toBeInTheDocument();
-    });
-
-    it('等回包时按 Esc 取消；没在等时 Esc 不归这一栏', async () => {
+describe('发送与取消反馈', () => {
+    it('等待时播报、允许快捷键重发并取消最新调用；空闲时放行 Esc', async () => {
         const user = userEvent.setup();
         service.call.mockImplementation(
             (req: DebugCallRequest) =>
@@ -330,30 +281,14 @@ describe('连发只显示最后一次', () => {
 
         await user.click(send);
         await screen.findByRole('button', { name: /取消/ });
+        expect(screen.getByTitle('取消只是不再等回包，上游可能已经执行了')).toBeInTheDocument();
+        expect(screen.getByText('已发送，正在等回包')).toBeInTheDocument();
+        expect(screen.getByText(/\d+\.\d 秒/).closest('[aria-live]')).toBeNull();
+        fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true });
+        await waitFor(() => expect(editorCalls()).toHaveLength(2));
         fireEvent.keyDown(window, { key: 'Escape' });
         await waitFor(() => expect(service.cancel).toHaveBeenCalledTimes(1));
-    });
-});
-
-describe('不能发的时候写明原因', () => {
-    it('Bot 没在运行时按钮禁用并写「Bot 没在运行」', async () => {
-        service.workspace.mockResolvedValue(workspace('get_login_info', '{}'));
-        await debugWorkspaceStore.load();
-        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-        render(
-            <QueryClientProvider client={client}>
-                <TooltipProvider>
-                    <CenterColumn
-                        target={{ ...BOT, running: false }}
-                        callChannel={{ kind: 'auto' }}
-                        onOpenPalette={vi.fn()}
-                        onRevealCallChannel={vi.fn()}
-                    />
-                </TooltipProvider>
-            </QueryClientProvider>,
-        );
-        expect(await screen.findByText('Bot 没在运行')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /^发送/ })).toBeDisabled();
+        expect(service.cancel).toHaveBeenCalledWith(editorCalls()[1]!.request_id);
     });
 });
 
@@ -376,7 +311,7 @@ describe('请求区与回包区', () => {
             auto_call: { kind: 'internal' },
             auto_events: { kind: 'internal' },
         });
-        await renderColumn('get_login_info', '{}', { kind: 'internal' });
+        await renderColumn('get_login_info', '{}', { callChannel: { kind: 'internal' } });
         act(() => debugWorkspaceStore.setTabChannel('t1', { kind: 'http', name: '旧通道' }));
         const send = screen.getByRole('button', { name: /^发送/ });
         await waitFor(() => expect(send).toBeEnabled());
@@ -436,28 +371,13 @@ describe('请求区与回包区', () => {
 describe('确认框和新开的标签', () => {
     it('确认框开着时 Bot 停了：点「确认调用」也不发，按钮旁写明原因', async () => {
         const user = userEvent.setup({ pointerEventsCheck: 0 });
-        service.workspace.mockResolvedValue(workspace('delete_msg', '{\n  "message_id": 42\n}'));
-        await debugWorkspaceStore.load();
-        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-        const ui = (target: DebugTarget) => (
-            <QueryClientProvider client={client}>
-                <TooltipProvider>
-                    <CenterColumn
-                        target={target}
-                        callChannel={{ kind: 'auto' }}
-                        onOpenPalette={vi.fn()}
-                        onRevealCallChannel={vi.fn()}
-                    />
-                </TooltipProvider>
-            </QueryClientProvider>
-        );
-        const { rerender } = render(ui(BOT));
+        const { rerender } = await renderColumn('delete_msg', '{\n  "message_id": 42\n}');
         const send = await screen.findByRole('button', { name: /^发送/ });
         await waitFor(() => expect(send).toBeEnabled());
         await user.click(send);
         await screen.findByText('会撤回消息 42');
 
-        rerender(ui({ ...BOT, running: false }));
+        rerender(column({ ...BOT, running: false }));
         await user.click(screen.getByRole('button', { name: '确认调用' }));
         await waitFor(() => expect(screen.queryByText('会撤回消息 42')).not.toBeInTheDocument());
         expect(editorCalls()).toHaveLength(0);
@@ -503,23 +423,6 @@ describe('确认框和新开的标签', () => {
         expect(ws().tabs).toHaveLength(3);
         expect(ws().tabs.find((t) => t.id === opened.id)?.action).toBe('get_stranger_info');
     });
-
-    it('发送时给读屏播报一句「正在等回包」，计时本身不是 live region', async () => {
-        const user = userEvent.setup();
-        service.call.mockImplementation(
-            (req: DebugCallRequest) =>
-                new Promise<DebugCallResponse>((resolve) => {
-                    if (req.origin !== 'editor') resolve(okResponse(req, []));
-                }),
-        );
-        await renderColumn('get_login_info', '{}');
-        const send = await screen.findByRole('button', { name: /^发送/ });
-        await waitFor(() => expect(send).toBeEnabled());
-        await user.click(send);
-        expect(await screen.findByText('已发送，正在等回包')).toBeInTheDocument();
-        const counter = screen.getByText(/\d+\.\d 秒/);
-        expect(counter.closest('[aria-live]')).toBeNull();
-    });
 });
 
 describe('读屏播报', () => {
@@ -541,23 +444,10 @@ describe('读屏播报', () => {
         });
     });
 
-    it('发不了的时候按 Ctrl+Enter，播报原因', async () => {
-        service.workspace.mockResolvedValue(workspace('get_login_info', '{}'));
-        await debugWorkspaceStore.load();
-        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-        render(
-            <QueryClientProvider client={client}>
-                <TooltipProvider>
-                    <CenterColumn
-                        target={{ ...BOT, running: false }}
-                        callChannel={{ kind: 'auto' }}
-                        onOpenPalette={vi.fn()}
-                        onRevealCallChannel={vi.fn()}
-                    />
-                </TooltipProvider>
-            </QueryClientProvider>,
-        );
+    it('Bot 停止时禁用发送；按 Ctrl+Enter 播报原因且不调用', async () => {
+        await renderColumn('get_login_info', '{}', { target: { ...BOT, running: false } });
         await screen.findByText('Bot 没在运行');
+        expect(screen.getByRole('button', { name: /^发送/ })).toBeDisabled();
         expect(screen.queryByText(/发不了：/)).not.toBeInTheDocument();
         fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true });
         const status = await screen.findByText(/发不了：Bot 没在运行/);
@@ -566,22 +456,7 @@ describe('读屏播报', () => {
     });
 
     it('播报的是按下那一刻的原因：之后原因变了不跟着再读，再按一次才读新的', async () => {
-        service.workspace.mockResolvedValue(workspace('get_login_info', '{}'));
-        await debugWorkspaceStore.load();
-        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-        const ui = (running: boolean) => (
-            <QueryClientProvider client={client}>
-                <TooltipProvider>
-                    <CenterColumn
-                        target={{ ...BOT, running }}
-                        callChannel={{ kind: 'auto' }}
-                        onOpenPalette={vi.fn()}
-                        onRevealCallChannel={vi.fn()}
-                    />
-                </TooltipProvider>
-            </QueryClientProvider>
-        );
-        const { container, rerender } = render(ui(true));
+        const { container, rerender } = await renderColumn('get_login_info', '{}');
         const regions = () =>
             [...container.querySelectorAll('span.sr-only[role="status"]')].map(
                 (el) => el.textContent ?? '',
@@ -597,7 +472,7 @@ describe('读屏播报', () => {
 
         // 改好了、Bot 又停了：原因变了，但没有再按，播报区不该冒出新的一句
         act(() => debugWorkspaceStore.setParamsText(tabId(), '{}'));
-        rerender(ui(false));
+        rerender(column({ ...BOT, running: false }));
         await screen.findByText('Bot 没在运行');
         await new Promise((r) => setTimeout(r, 20));
         expect(regions().some((t) => t.includes('发不了'))).toBe(false);

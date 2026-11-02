@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NetworkTab } from './NetworkTab';
 import { draftFromBackendAndPrefs, type SettingsDraft } from '../settings-draft';
 import { mockBackendSettings } from '../../../core/ipc/mock/settings.mock';
@@ -56,12 +56,6 @@ beforeEach(() => {
         },
     ]);
 });
-beforeAll(() => {
-    Element.prototype.hasPointerCapture ??= () => false;
-    Element.prototype.releasePointerCapture ??= () => {};
-    Element.prototype.scrollIntoView ??= () => {};
-});
-
 afterEach(cleanup);
 
 describe('network settings tab', () => {

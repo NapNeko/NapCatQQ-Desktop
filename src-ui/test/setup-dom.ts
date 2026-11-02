@@ -47,6 +47,19 @@ Object.defineProperty(window, 'IntersectionObserver', {
 globalThis.ResizeObserver = ResizeObserverMock;
 globalThis.IntersectionObserver = IntersectionObserverMock as typeof IntersectionObserver;
 
+// Radix 的指针交互与 CodeMirror 的文字测量会调用这些 jsdom 缺失的 API。
+Element.prototype.hasPointerCapture ??= () => false;
+Element.prototype.releasePointerCapture ??= () => {};
+Element.prototype.setPointerCapture ??= () => {};
+Element.prototype.scrollIntoView ??= () => {};
+Range.prototype.getClientRects ??= () =>
+    ({
+        length: 0,
+        item: () => null,
+        [Symbol.iterator]: [][Symbol.iterator],
+    }) as unknown as DOMRectList;
+Range.prototype.getBoundingClientRect ??= () => new DOMRect();
+
 // 限制动画到浏览器帧率，并在环境销毁时清掉 Node 定时器。
 const pendingFrames = new Set<number>();
 let windowClosed = false;
@@ -83,17 +96,3 @@ Object.defineProperty(window, 'cancelAnimationFrame', {
 
 globalThis.requestAnimationFrame = raf;
 globalThis.cancelAnimationFrame = caf;
-
-Object.defineProperty(window, '__TAURI__', {
-    writable: true,
-    value: {
-        core: {
-            invoke: vi.fn(),
-        },
-        event: {
-            listen: vi.fn(),
-            emit: vi.fn(),
-        },
-        path: {},
-    },
-});

@@ -1,17 +1,10 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TooltipProvider } from '../../../shared/ui';
 import { preferencesStore } from '../../../core/domain/settings/preferencesStore';
 import type { ComposerEntry } from '../../../core/domain/debug/messageBuilder';
 import { MessageBuilderDialog } from './MessageBuilder';
-
-// Radix Select 打开时会用到这几个 jsdom 没有的 DOM API
-beforeAll(() => {
-    Element.prototype.hasPointerCapture ??= () => false;
-    Element.prototype.releasePointerCapture ??= () => {};
-    Element.prototype.scrollIntoView ??= () => {};
-});
 
 beforeEach(() => {
     preferencesStore.setMotionEnabled(false);

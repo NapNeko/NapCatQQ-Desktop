@@ -7,27 +7,16 @@ import type { DebugActionSummary } from '../../core/ipc/generated/debug/DebugAct
 import type { DebugCollections } from '../../core/ipc/generated/debug/DebugCollections';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 
-const service: Record<string, ReturnType<typeof vi.fn>> = {
+const service = vi.hoisted(() => ({
     catalog: vi.fn(),
     collections: vi.fn(),
     call: vi.fn(),
     workspace: vi.fn(),
     saveWorkspace: vi.fn(),
-};
+}));
 
 vi.mock('../../core/services/onebot-debug.service', () => ({
-    onebotDebugService: new Proxy(
-        {},
-        {
-            get:
-                (_t, key: string) =>
-                (...args: unknown[]) => {
-                    const fn = service[key];
-                    if (!fn) throw new Error(`没有模拟 service.${key}`);
-                    return fn(...args);
-                },
-        },
-    ),
+    onebotDebugService: service,
 }));
 vi.mock('../../hooks/ui/pushErrorBar', () => ({ pushErrorBar: vi.fn() }));
 

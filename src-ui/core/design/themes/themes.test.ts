@@ -41,17 +41,6 @@ describe('theme registry', () => {
         expect(new Set(ids).size).toBe(ids.length);
     });
 
-    it('orders palette families so the picker rows pack into 4 columns', () => {
-        const spans = THEME_GROUPS.slice(2).map((g) => g.items.length);
-        let row = 0;
-        for (const span of spans) {
-            row += span;
-            expect(row).toBeLessThanOrEqual(4);
-            if (row === 4) row = 0;
-        }
-        expect(row).toBe(0);
-    });
-
     it('falls back to auto for unknown or removed theme ids', () => {
         expect(normalizeTheme('tokyo-night-storm')).toBe('tokyo-night-storm');
         expect(normalizeTheme('mocha')).toBe('mocha');

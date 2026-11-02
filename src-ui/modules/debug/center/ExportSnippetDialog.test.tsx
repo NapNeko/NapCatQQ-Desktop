@@ -6,20 +6,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { DebugChannels } from '../../../core/ipc/generated/debug/DebugChannels';
 import type { DebugRequestDraft } from '../../../core/ipc/generated/debug/DebugRequestDraft';
 
-const service = {
+const service = vi.hoisted(() => ({
     channels: vi.fn(),
-};
+}));
 
 vi.mock('../../../core/services/onebot-debug.service', () => ({
-    onebotDebugService: new Proxy(
-        {},
-        {
-            get:
-                (_t, key: string) =>
-                (...args: unknown[]) =>
-                    (service as Record<string, (...a: unknown[]) => unknown>)[key](...args),
-        },
-    ),
+    onebotDebugService: service,
 }));
 vi.mock('../../../hooks/ui/pushErrorBar', () => ({ pushErrorBar: vi.fn() }));
 

@@ -47,19 +47,13 @@ describe('Dialog', () => {
 
     // 调试台等页面的快捷键靠 [role="dialog"] 在对话框里让路，读屏靠它认出对话框；
     // 内容节点经 asChild 包了一层，Radix 给的属性不能在这一层丢掉
-    it('内容节点带着 Radix 的 role、标题和说明', async () => {
+    it('内容保留 role、标题和说明，打开后焦点进入对话框', async () => {
         preferencesStore.setMotionEnabled(false);
         render(<Open />);
         const dialog = await screen.findByRole('dialog', { name: '收藏请求' });
         expect(dialog).toHaveAccessibleDescription('存下接口和参数');
         expect(dialog).toContainElement(screen.getByRole('textbox', { name: '名字' }));
         expect(dialog).toHaveAttribute('data-state', 'open');
-    });
-
-    it('打开后焦点在对话框里面', async () => {
-        preferencesStore.setMotionEnabled(false);
-        render(<Open />);
-        const dialog = await screen.findByRole('dialog', { name: '收藏请求' });
         await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
     });
 

@@ -8,7 +8,7 @@ import type { DebugCatalog } from '../../core/ipc/generated/debug/DebugCatalog';
 import type { DebugChannels } from '../../core/ipc/generated/debug/DebugChannels';
 import type { DebugCollections } from '../../core/ipc/generated/debug/DebugCollections';
 
-const service = {
+const service = vi.hoisted(() => ({
     targets: vi.fn(),
     channels: vi.fn(),
     testChannel: vi.fn(),
@@ -21,7 +21,7 @@ const service = {
     importCollections: vi.fn(),
     workspace: vi.fn(),
     saveWorkspace: vi.fn(),
-};
+}));
 const pushErrorBar = vi.fn();
 const pushInfoBar = vi.fn();
 let domainHandlers: Array<(event: DomainEvent) => void> = [];
@@ -33,15 +33,7 @@ const subscribeDomainEvents = vi.fn((handler: (event: DomainEvent) => void) => {
 });
 
 vi.mock('../../core/services/onebot-debug.service', () => ({
-    onebotDebugService: new Proxy(
-        {},
-        {
-            get:
-                (_t, key: string) =>
-                (...args: unknown[]) =>
-                    (service as Record<string, (...a: unknown[]) => unknown>)[key](...args),
-        },
-    ),
+    onebotDebugService: service,
 }));
 vi.mock('../../core/services/domain-event-hub', () => ({
     subscribeDomainEvents: (handler: (event: DomainEvent) => void) =>

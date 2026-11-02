@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -9,7 +9,7 @@ import type { DebugCallRequest } from '../../../core/ipc/generated/debug/DebugCa
 import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
 import type { DebugWorkspace } from '../../../core/ipc/generated/debug/DebugWorkspace';
 
-const service = {
+const service = vi.hoisted(() => ({
     targets: vi.fn(),
     channels: vi.fn(),
     catalog: vi.fn(),
@@ -19,18 +19,10 @@ const service = {
     workspace: vi.fn(),
     saveWorkspace: vi.fn(),
     collections: vi.fn(),
-};
+}));
 
 vi.mock('../../../core/services/onebot-debug.service', () => ({
-    onebotDebugService: new Proxy(
-        {},
-        {
-            get:
-                (_t, key: string) =>
-                (...args: unknown[]) =>
-                    (service as Record<string, (...a: unknown[]) => unknown>)[key](...args),
-        },
-    ),
+    onebotDebugService: service,
 }));
 vi.mock('../../../core/services/domain-event-hub', () => ({
     subscribeDomainEvents: () => () => {},
@@ -132,21 +124,6 @@ async function renderColumn(params_text = '{}') {
         { wrapper },
     );
 }
-
-beforeAll(() => {
-    Element.prototype.hasPointerCapture ??= () => false;
-    Element.prototype.releasePointerCapture ??= () => {};
-    Element.prototype.setPointerCapture ??= () => {};
-    Element.prototype.scrollIntoView ??= () => {};
-    // CodeMirror 量文字尺寸时用到，jsdom 没有
-    Range.prototype.getClientRects ??= () =>
-        ({
-            length: 0,
-            item: () => null,
-            [Symbol.iterator]: [][Symbol.iterator],
-        }) as unknown as DOMRectList;
-    Range.prototype.getBoundingClientRect ??= () => new DOMRect();
-});
 
 beforeEach(() => {
     for (const fn of Object.values(service)) fn.mockReset();

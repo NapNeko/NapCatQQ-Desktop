@@ -9,28 +9,17 @@ import type { DebugHistoryQuery } from '../../../core/ipc/generated/debug/DebugH
 import type { DebugHistorySummary } from '../../../core/ipc/generated/debug/DebugHistorySummary';
 import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
 
-const service: Record<string, ReturnType<typeof vi.fn>> = {
+const service = vi.hoisted(() => ({
     history: vi.fn(),
     historyEntry: vi.fn(),
     clearHistory: vi.fn(),
     collections: vi.fn(),
     saveCollections: vi.fn(),
     catalog: vi.fn(),
-};
+}));
 
 vi.mock('../../../core/services/onebot-debug.service', () => ({
-    onebotDebugService: new Proxy(
-        {},
-        {
-            get:
-                (_t, key: string) =>
-                (...args: unknown[]) => {
-                    const fn = service[key];
-                    if (!fn) throw new Error(`没有模拟 service.${key}`);
-                    return fn(...args);
-                },
-        },
-    ),
+    onebotDebugService: service,
 }));
 vi.mock('../../../hooks/ui/pushErrorBar', () => ({ pushErrorBar: vi.fn() }));
 
@@ -53,9 +42,6 @@ beforeAll(() => {
         configurable: true,
         get: () => 280,
     });
-    Element.prototype.hasPointerCapture ??= () => false;
-    Element.prototype.releasePointerCapture ??= () => {};
-    Element.prototype.setPointerCapture ??= () => {};
 });
 afterAll(() => {
     if (offsetHeight) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', offsetHeight);

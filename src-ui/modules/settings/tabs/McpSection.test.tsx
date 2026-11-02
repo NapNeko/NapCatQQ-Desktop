@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { preferencesStore } from '../../../core/domain/settings/preferencesStore';
 import { mockBackendSettings } from '../../../core/ipc/mock/settings.mock';
 import { draftFromBackendAndPrefs, type SettingsDraft } from '../settings-draft';
@@ -18,12 +18,6 @@ const state = vi.hoisted(() => ({
     rotate: vi.fn(),
 }));
 vi.mock('../../../hooks/settings/useMcpSettings', () => ({ useMcpSettings: () => state }));
-
-beforeAll(() => {
-    Element.prototype.hasPointerCapture ??= () => false;
-    Element.prototype.releasePointerCapture ??= () => {};
-    Element.prototype.scrollIntoView ??= () => {};
-});
 
 function Form({ enabled = false, dangerous = false }: { enabled?: boolean; dangerous?: boolean }) {
     const [draft, setDraft] = useState(() => ({

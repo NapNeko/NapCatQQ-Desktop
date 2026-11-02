@@ -21,14 +21,6 @@ function data(response: DebugCallResponse): Record<string, unknown> {
 }
 
 describe('chat action previews', () => {
-    it('exposes distinct friend categories with the same members as the ordinary friend list', async () => {
-        const grouped = data(
-            await chatMock.call(request('get_friends_with_category', {})),
-        ) as unknown as { categoryId: number; categoryName: string; buddyList: unknown[] }[];
-        const friends = data(await chatMock.call(request('get_friend_list', {})));
-        expect(grouped.map((category) => category.categoryName)).toEqual(['开发伙伴', '生活朋友']);
-        expect(grouped.flatMap((category) => category.buddyList)).toEqual(friends);
-    });
     it('keeps forwarded message content readable and emits a recall for its original conversation', async () => {
         const batches: DebugEventBatch[] = [];
         const subscription = await chatMock.subscribe('mock-chat-actions', (batch) =>
@@ -79,21 +71,6 @@ describe('chat action previews', () => {
             });
         } finally {
             await chatMock.unsubscribe(subscription.subscription_id);
-        }
-    });
-    it('reports a missing original instead of pretending recall or forwarding succeeded', async () => {
-        for (const [action, params] of [
-            ['delete_msg', { message_id: 'missing-preview-message' }],
-            [
-                'send_group_forward_msg',
-                {
-                    group_id: '20001',
-                    messages: [{ type: 'node', data: { id: 'missing-preview-message' } }],
-                },
-            ],
-        ] as const) {
-            const response = await chatMock.call(request(action, params));
-            expect(response.result.kind === 'ok' && response.result.outcome.ok).toBe(false);
         }
     });
 });

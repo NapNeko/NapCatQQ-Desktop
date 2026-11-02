@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -7,7 +7,7 @@ import type { DebugChannels } from '../../core/ipc/generated/debug/DebugChannels
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 import type { DebugWorkspace } from '../../core/ipc/generated/debug/DebugWorkspace';
 
-const service = {
+const service = vi.hoisted(() => ({
     targets: vi.fn(),
     channels: vi.fn(),
     testChannel: vi.fn(),
@@ -18,20 +18,12 @@ const service = {
     receivers: vi.fn(),
     stopReceiver: vi.fn(),
     storageNotices: vi.fn(),
-};
+}));
 const pushErrorBar = vi.fn();
 let domainHandlers: Array<(event: unknown) => void> = [];
 
 vi.mock('../../core/services/onebot-debug.service', () => ({
-    onebotDebugService: new Proxy(
-        {},
-        {
-            get:
-                (_t, key: string) =>
-                (...args: unknown[]) =>
-                    (service as Record<string, (...a: unknown[]) => unknown>)[key](...args),
-        },
-    ),
+    onebotDebugService: service,
 }));
 vi.mock('../../core/services/domain-event-hub', () => ({
     subscribeDomainEvents: (handler: (event: unknown) => void) => {
@@ -132,22 +124,6 @@ function renderPage(onNavigate = vi.fn(), prime?: (client: QueryClient) => void)
     );
     return { onNavigate, ...render(<DebugConsolePage onNavigate={onNavigate} />, { wrapper }) };
 }
-
-// Radix Popover 打开时会用到这几个 jsdom 没有的 DOM API
-beforeAll(() => {
-    Element.prototype.hasPointerCapture ??= () => false;
-    Element.prototype.releasePointerCapture ??= () => {};
-    Element.prototype.setPointerCapture ??= () => {};
-    Element.prototype.scrollIntoView ??= () => {};
-    // 中栏的 JSON 编辑器（CodeMirror）量文字位置要用
-    Range.prototype.getClientRects ??= () =>
-        ({
-            length: 0,
-            item: () => null,
-            [Symbol.iterator]: [][Symbol.iterator],
-        }) as unknown as DOMRectList;
-    Range.prototype.getBoundingClientRect ??= () => new DOMRect();
-});
 
 beforeEach(() => {
     for (const fn of Object.values(service)) fn.mockReset();

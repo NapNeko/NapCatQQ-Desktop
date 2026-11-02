@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultBotConfig } from '../../core/domain/bot/config-defaults';
 import { preferencesStore } from '../../core/domain/settings/preferencesStore';
 import type { AppInstance, BotConfig, OneBotLinkPlan } from '../../core/ipc/types';
@@ -51,12 +51,6 @@ vi.mock('../../hooks/apps/useAppLink', () => ({
         variables: { instanceId: 'app-1', botId: '10001' },
     }),
 }));
-
-beforeAll(() => {
-    Element.prototype.hasPointerCapture ??= () => false;
-    Element.prototype.releasePointerCapture ??= () => {};
-    Element.prototype.scrollIntoView ??= () => {};
-});
 
 function instance(hostId = 'remote:a'): AppInstance {
     return {
