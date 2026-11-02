@@ -63,8 +63,8 @@ function SelectInner<V extends string>(
     const labelId = label ? `${fieldId}-label` : undefined;
     const describedById = fieldId ? `${fieldId}-desc` : undefined;
     const m = useMotion();
-    // Radix Select：空字符串会抛错，统一当未选。
-    const radixValue = value === '' || value === undefined ? undefined : value;
+    // Root 用空串表示未选，保持受控；只有 Select.Item 禁止空串。
+    const radixValue = value ?? '';
     const selectedLabel = radixValue
         ? items.find((item) => item.value === radixValue)?.label
         : undefined;

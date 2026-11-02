@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import gsap from 'gsap';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -22,6 +22,7 @@ beforeAll(() => {
 });
 
 afterEach(() => {
+    cleanup();
     preferencesStore.reset();
     vi.restoreAllMocks();
 });
@@ -32,7 +33,9 @@ describe('Select 弹出层进场', () => {
         const fromTo = vi.spyOn(gsap, 'fromTo');
         const { rerender } = renderSelect();
 
-        await user.click(screen.getByRole('combobox'));
+        await act(async () => {
+            await user.click(screen.getByRole('combobox'));
+        });
         const listbox = await screen.findByRole('listbox');
         rerender(<Select items={ITEMS} value="a" onValueChange={() => {}} />);
 
@@ -44,10 +47,16 @@ describe('Select 弹出层进场', () => {
         const fromTo = vi.spyOn(gsap, 'fromTo');
         renderSelect();
 
-        await user.click(screen.getByRole('combobox'));
+        await act(async () => {
+            await user.click(screen.getByRole('combobox'));
+        });
         const first = await screen.findByRole('listbox');
-        await user.keyboard('{Escape}');
-        await user.click(screen.getByRole('combobox'));
+        await act(async () => {
+            await user.keyboard('{Escape}');
+        });
+        await act(async () => {
+            await user.click(screen.getByRole('combobox'));
+        });
         const second = await screen.findByRole('listbox');
 
         expect(second).not.toBe(first);
@@ -60,7 +69,9 @@ describe('Select 弹出层进场', () => {
         const fromTo = vi.spyOn(gsap, 'fromTo');
         renderSelect();
 
-        await user.click(screen.getByRole('combobox'));
+        await act(async () => {
+            await user.click(screen.getByRole('combobox'));
+        });
         const listbox = await screen.findByRole('listbox');
 
         expect(listbox.style.visibility).not.toBe('hidden');
@@ -69,6 +80,36 @@ describe('Select 弹出层进场', () => {
 });
 
 describe('Select 标签关联', () => {
+    it('异步选中再清空时保持受控且恢复占位符', () => {
+        const warn = vi.spyOn(console, 'warn');
+        const view = render(
+            <Select
+                items={ITEMS}
+                value={undefined}
+                placeholder="请选择"
+                onValueChange={() => {}}
+            />,
+        );
+        expect(screen.getByRole('combobox')).toHaveTextContent('请选择');
+        view.rerender(
+            <Select items={ITEMS} value="a" placeholder="请选择" onValueChange={() => {}} />,
+        );
+        expect(screen.getByRole('combobox')).toHaveTextContent('甲');
+        view.rerender(
+            <Select
+                items={ITEMS}
+                value={undefined}
+                placeholder="请选择"
+                onValueChange={() => {}}
+            />,
+        );
+        expect(screen.getByRole('combobox')).toHaveTextContent('请选择');
+        expect(
+            warn.mock.calls.filter(([message]) =>
+                /uncontrolled.*controlled|controlled.*uncontrolled/.test(String(message)),
+            ),
+        ).toHaveLength(0);
+    });
     it('未传 id 或 name 时，可见标签仍是稳定的可访问名称', () => {
         const label = <span title="模型思考强度">思考强度</span>;
         const { rerender } = render(
