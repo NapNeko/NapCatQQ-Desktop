@@ -12,3 +12,15 @@ export function hostIdDisplayLabel(hostId: string, servers: readonly ServerNameS
     if (hostId === 'local') return '本机';
     return runtimeTargetDisplayLabel(hostId, servers);
 }
+
+export function isAppHostRemoved(
+    hostId: string | undefined,
+    servers: readonly ServerNameSource[],
+    serversLoaded: boolean,
+): boolean {
+    return (
+        serversLoaded &&
+        !!hostId?.startsWith('remote:') &&
+        !servers.some((server) => `remote:${server.id}` === hostId)
+    );
+}

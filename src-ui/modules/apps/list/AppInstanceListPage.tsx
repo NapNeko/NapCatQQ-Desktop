@@ -41,7 +41,7 @@ import { ImportInstanceDialog, type ImportInstanceTarget } from '../ImportInstan
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { openTerminal } from '../../../hooks/terminal/terminalStore';
 import { useFeatureEnabled } from '../../../hooks/preferences/featureTogglesStore';
-import { hostIdDisplayLabel } from '../hostLabel';
+import { hostIdDisplayLabel, isAppHostRemoved } from '../hostLabel';
 import { STATE_META, isInstalled } from '../../../core/domain/apps/instanceState';
 import { CardInstallProgress } from '../InstallProgress';
 import { FloatingActions } from './FloatingActions';
@@ -64,7 +64,7 @@ export const AppInstanceListPage: React.FC<AppInstanceListPageProps> = ({
 }) => {
     const frameworks = useAppFrameworks();
     const apps = useAppInstances();
-    const { servers } = useServerManager();
+    const { servers, isSuccess: serversLoaded } = useServerManager();
 
     const [linkInstanceId, setLinkInstanceId] = useState<string | null>(null);
     const [deleteInstance, setDeleteInstance] = useState<AppInstance | null>(null);
@@ -145,6 +145,7 @@ export const AppInstanceListPage: React.FC<AppInstanceListPageProps> = ({
                         manifestById={manifestById}
                         latestByFramework={latestVersions}
                         servers={servers}
+                        serversLoaded={serversLoaded}
                         pendingId={apps.pendingId}
                         refreshingId={apps.refreshingId}
                         onViewTasks={onNavigate ? () => onNavigate('tasks') : undefined}
@@ -172,6 +173,7 @@ export const AppInstanceListPage: React.FC<AppInstanceListPageProps> = ({
 
             <DeleteInstanceDialog
                 instance={deleteInstance}
+                hostRemoved={isAppHostRemoved(deleteInstance?.host_id, servers, serversLoaded)}
                 isRemoving={apps.isRemoving}
                 onClose={() => setDeleteInstance(null)}
                 onConfirm={async (removeFiles) => {
@@ -240,6 +242,7 @@ interface InstanceListProps {
     /** framework_id -> 上游最新正式版；没有表示不支持按版本安装或还没查到 */
     latestByFramework: Map<string, string>;
     servers: ReturnType<typeof useServerManager>['servers'];
+    serversLoaded: boolean;
     pendingId: string | null | undefined;
     refreshingId: string | null | undefined;
     onViewTasks?: () => void;
@@ -284,6 +287,7 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
     instance: i,
     manifestById,
     servers,
+    serversLoaded,
     pendingId,
     refreshingId,
     onViewTasks,
@@ -300,7 +304,8 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
 }) => {
     const manifest = manifestById.get(i.framework_id);
     const state = STATE_META[i.state];
-    const installing = i.state === 'installing';
+    const hostRemoved = isAppHostRemoved(i.host_id, servers, serversLoaded);
+    const installing = i.state === 'installing' && !hostRemoved;
     const refreshing = refreshingId === i.id;
     const busy = pendingId === i.id || installing;
     const installed = isInstalled(i);
@@ -318,7 +323,7 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
 
     const meta = [
         manifest?.display_name ?? i.framework_id,
-        `${hostIdDisplayLabel(i.host_id, servers)} :${i.port}`,
+        hostRemoved ? '主机已移除' : `${hostIdDisplayLabel(i.host_id, servers)} :${i.port}`,
         i.installed_version ? `v${i.installed_version}` : null,
         i.origin === 'imported' ? '导入' : null,
     ]
@@ -508,9 +513,11 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
                             </FooterIcon>
                             <FooterIcon
                                 label={
-                                    i.origin === 'imported'
-                                        ? '释放接管：只解除跟踪，不动目录'
-                                        : '删除实例：连同实例目录一起删'
+                                    hostRemoved
+                                        ? '移除实例记录'
+                                        : i.origin === 'imported'
+                                          ? '释放接管：只解除跟踪，不动目录'
+                                          : '删除实例：连同实例目录一起删'
                                 }
                                 disabled={busy}
                                 tone="danger"

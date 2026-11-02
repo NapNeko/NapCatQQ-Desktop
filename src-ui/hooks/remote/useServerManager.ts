@@ -192,6 +192,7 @@ export function useServerManager() {
     return {
         servers: serversQuery.data ?? [],
         isLoading: serversQuery.isLoading,
+        isSuccess: serversQuery.isSuccess,
         refetch: serversQuery.refetch,
 
         addServer: addMutation.mutate,
