@@ -22,7 +22,7 @@ PR 中前端单测步骤为 3 分 27 秒。两端打包本来已经并行，继�
 
 ## 发版
 
-release profile 使用 ThinLTO 和 16 个 codegen units，保留原有 `opt-level = "z"`、panic abort 与符号裁剪。这减少 fat LTO 的串行链接成本，但包体积和运行性能仍需随实际制品对比。[Cargo profile 说明](https://doc.rust-lang.org/cargo/reference/profiles.html#lto)
+release profile 使用 `lto = false` 和 16 个 codegen units，保留 crate 内 ThinLTO、原有 `opt-level = "z"`、panic abort 与符号裁剪。缓存命中后跨 crate ThinLTO 的 Windows 应用编译仍需 5 分 44 秒，因此取消这一步整程序优化；包体积和运行性能需要与实际制品一起权衡。[Cargo profile 说明](https://doc.rust-lang.org/cargo/reference/profiles.html#lto)
 
 [release-cache.yml](../../.github/workflows/release-cache.yml) 在 main 的 Rust / 构建配置变化后预热 Windows、Linux 的第三方依赖。精确命中时跳过编译；缺失时调用同一份构建工作流，不打包、不上传，也不继承发布 secrets。后续提交不打断正在进行的预热，避免反复冷启动。它独立于 PR Gate 和发版，亦可从 Actions 手动触发。
 

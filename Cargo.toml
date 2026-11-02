@@ -62,8 +62,8 @@ debug = "line-tables-only"
 debug = false
 
 [profile.release]
-# ThinLTO 保留跨 crate 优化，让发版代码生成与链接可以并行。
-lto = "thin"
+# 保留 crate 内优化，避免每次发版对整个依赖图重复做 LTO。
+lto = false
 codegen-units = 16
 panic = "abort"
 strip = "symbols"
