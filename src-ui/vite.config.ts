@@ -75,6 +75,7 @@ export default defineConfig({
                         if (id.includes('@radix-ui')) return 'vendor-radix';
                         if (id.includes('lucide-react')) return 'vendor-icons';
                         // xterm 只有终端面板用，单拆出来跟着懒加载的 TerminalDock 走，不进启动就加载的 vendor
+                        if (/[\\/]@xterm[\\/]addon-/.test(id)) return 'vendor-xterm-addons';
                         if (id.includes('@xterm')) return 'vendor-xterm';
                         // 编辑器与解析器放在同一块，避免 commands/language 跨块成环或进入公共启动包。
                         if (

@@ -1,7 +1,7 @@
 // 新手引导：门禁式选择 + 完整分步说明。
 // 只指路、不装组件；文案说人话；视觉走暖粉 hero + 进度点。
 
-import { useEffect, useState, type ComponentType } from 'react';
+import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react';
 import type { LucideProps } from 'lucide-react';
 import {
     ArrowRight,
@@ -18,17 +18,23 @@ import { Button, Dialog, DialogContent, DialogDescription, DialogTitle } from '.
 import { DialogStepTransition, MotionIcon } from '../../ui/motion';
 import { cn } from '../../utils/cn';
 import type { OnboardingDialogMode } from '../../../hooks/desktop/useOnboardingGate';
-import {
-    GoPreview,
-    MapPreview,
-    PathStoryPreview,
-    TipsPreview,
-    WelcomePreview,
-} from './OnboardingPreviews';
+import type { OnboardingGuideStepId } from './onboardingSteps';
 
-export const ONBOARDING_GUIDE_STEP_IDS = ['welcome', 'map', 'path', 'tips', 'go'] as const;
-
-export type OnboardingGuideStepId = (typeof ONBOARDING_GUIDE_STEP_IDS)[number];
+const WelcomePreview = lazy(() =>
+    import('./OnboardingPreviews').then((m) => ({ default: m.WelcomePreview })),
+);
+const MapPreview = lazy(() =>
+    import('./OnboardingPreviews').then((m) => ({ default: m.MapPreview })),
+);
+const PathStoryPreview = lazy(() =>
+    import('./OnboardingPreviews').then((m) => ({ default: m.PathStoryPreview })),
+);
+const TipsPreview = lazy(() =>
+    import('./OnboardingPreviews').then((m) => ({ default: m.TipsPreview })),
+);
+const GoPreview = lazy(() =>
+    import('./OnboardingPreviews').then((m) => ({ default: m.GoPreview })),
+);
 
 export interface OnboardingDialogProps {
     open: boolean;
@@ -506,7 +512,11 @@ function GuideBody({
                                             'w-full shrink-0 lg:w-[min(100%,22.5rem)] lg:flex-none xl:w-[24rem]',
                                     )}
                                 >
-                                    <GuideVisualBlock kind={step.visual} />
+                                    <Suspense
+                                        fallback={<div className="min-h-64" aria-busy="true" />}
+                                    >
+                                        <GuideVisualBlock kind={step.visual} />
+                                    </Suspense>
                                 </div>
                             </div>
                         );

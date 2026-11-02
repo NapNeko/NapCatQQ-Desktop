@@ -62,10 +62,8 @@ import { useFrameworkTour } from '../hooks/desktop/useFrameworkTour';
 import { useAppWindowBridge } from '../hooks/desktop/useAppWindowBridge';
 import { useDesktopUpdateStartupNotice } from '../hooks/desktop/useDesktopUpdate';
 import { DesktopConsentDialog } from '../shared/components/next/DesktopConsentDialog';
-import {
-    ONBOARDING_GUIDE_STEP_IDS,
-    OnboardingDialog,
-} from '../shared/components/next/OnboardingDialog';
+import { OnboardingDialog } from '../shared/components/next/OnboardingDialog';
+import { ONBOARDING_GUIDE_STEP_IDS } from '../shared/components/next/onboardingSteps';
 import { OnboardingContinueDialog } from '../shared/components/next/OnboardingContinueDialog';
 import { SpotlightTour } from '../shared/components/next/SpotlightTour';
 import { perfMark } from '../core/domain/performance/perfMarks';
@@ -252,6 +250,7 @@ export const AppNext: React.FC = () => {
     useDataLayoutConsolidateAlert(bootstrap);
 
     const desktopConsent = useDesktopConsentGate();
+    const { ensureConsent } = desktopConsent;
     const onboarding = useOnboardingGate();
     const consentWasBlockingRef = useRef(false);
 
@@ -381,9 +380,9 @@ export const AppNext: React.FC = () => {
 
     useEffect(() => {
         // Bot 列表 / 批量启动等复用 App 级协议门禁，禁止页面内再挂一份 gate
-        registerDesktopConsentHost((action) => desktopConsent.ensureConsent(action));
+        registerDesktopConsentHost((action) => ensureConsent(action));
         return () => registerDesktopConsentHost(null);
-    }, [desktopConsent.ensureConsent]);
+    }, [ensureConsent]);
 
     const [direction, setDirection] = useState<-1 | 0 | 1>(0);
 
