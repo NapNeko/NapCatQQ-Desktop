@@ -32,6 +32,7 @@ export interface FeatureDef {
 }
 
 export interface FeatureGroup {
+    description?: string;
     title: string;
     items: FeatureDef[];
 }
@@ -39,54 +40,58 @@ export interface FeatureGroup {
 export const FEATURE_GROUPS: ReadonlyArray<FeatureGroup> = [
     {
         title: '协议端',
+        description: 'QQ 机器人底层协议端实现；两款协议端至少保留一个开启',
         items: [
             {
                 key: 'napcat',
                 label: 'NapCat',
-                description: '组件页的 NapCat 行、新建 Bot 时的 NapCat 选项',
+                description: 'NapCat 协议支持，控制组件探测与新建 Bot 选项',
                 saves: '启动时不再在每台主机上探测 NapCat',
             },
             {
                 key: 'snowluma',
                 label: 'SnowLuma',
-                description: '组件页的 SnowLuma 行、新建 Bot 时的 SnowLuma 选项',
+                description: 'SnowLuma 协议支持，控制组件探测与新建 Bot 选项',
                 saves: '启动时不再在每台主机上探测 SnowLuma',
             },
         ],
     },
     {
         title: '应用端',
+        description: '第三方机器人应用框架托管与集成',
         items: [
             {
                 key: 'apps',
                 label: '应用端',
                 description:
-                    '应用端页、组件页的应用端组、Bot 配置里的「对接应用端」。下面可以只藏其中几个框架',
+                    '应用端框架生态，包含组件页应用端组与 Bot 自动对接',
                 saves: '实例不再随桌面端启动（每个实例是一个常驻的 Node / Python 进程）',
             },
         ],
     },
     {
         title: '远端主机',
+        description: '远端 Linux / Windows 服务器的附加值守与容器管理能力',
         items: [
             {
                 key: 'dockerPage',
                 label: '容器页',
                 description:
-                    '管理远端主机上的 Docker 和容器。开着时也只在有远端主机 Docker 可用时出现',
+                    '管理远端主机上的 Docker 环境与容器应用（仅在远端支持时显示）',
                 saves: '启动时不再到每台远端主机上探测 Docker',
             },
             {
                 key: 'ncdWatch',
                 label: '远端值守（ncd-watch）',
                 description:
-                    '桌面端退出后由远端主机继续盯 Bot 掉线。关掉后隐藏组件页的 ncd-watch 行和「设置 · 通知」里的远端值守',
-                saves: '不再每 45 秒给远端主机写心跳，也不再探测 ncd-watch',
+                    '桌面端退出后由远端主机守护进程继续盯 Bot 掉线并报警',
+                saves: '不再每 45 秒给远端主机写心跳，停止 watch 探测',
             },
         ],
     },
     {
         title: '工具',
+        description: '快捷功能与开发者辅助面板',
         items: [
             {
                 key: 'chat',
@@ -97,14 +102,14 @@ export const FEATURE_GROUPS: ReadonlyArray<FeatureGroup> = [
             {
                 key: 'terminal',
                 label: '内嵌终端',
-                description: '标题栏的终端按钮、Ctrl+` 快捷键、各卡片上的终端入口、「设置 · 终端」',
+                description: '标题栏终端按钮、快捷键（Ctrl+`）与 SSH 会话直连',
                 saves: '终端面板和 xterm（约 570 KB 脚本）不再加载',
             },
             {
                 key: 'apiDebug',
                 label: 'OneBot 调试台',
-                description: '侧栏和 Bot 卡片的「调试」入口',
-                saves: '调试台的接收器、会话和在途调用全部停掉（连 MCP 服务也不能再调）',
+                description: '侧栏与 Bot 卡片的 OneBot 11 协议接口调试与事件监听台',
+                saves: '调试台的接收器、会话和在途调用全部停掉',
             },
         ],
     },
@@ -207,16 +212,20 @@ export function featureOffBlock(
             const other = key === 'napcat' ? 'snowluma' : 'napcat';
             if (!draft[other]) return '两个协议端至少留一个';
             const n = usage.botsByBackend[key];
-            return n > 0 ? `有 ${n} 个 Bot 在用它，先删掉这些 Bot 再关` : null;
+            return n > 0
+                ? (n === 1 ? '当前有 1 个 Bot 正在使用，请先删除此 Bot' : `当前有 ${n} 个 Bot 正在使用，请先删除对应 Bot`)
+                : null;
         }
         case 'apps':
             return usage.activeAppInstances > 0
-                ? `有 ${usage.activeAppInstances} 个实例在运行或安装，先到应用端页停掉再关`
+                ? (usage.activeAppInstances === 1
+                    ? '当前有 1 个实例运行中，请先在应用端停止'
+                    : `当前有 ${usage.activeAppInstances} 个实例运行中，请先在应用端停止`)
                 : null;
         case 'ncdWatch':
             // 心跳停了，装着的 watch 会以为桌面端退出了、自己发告警，和桌面端的重复
             return usage.hostsWithNcdWatch > 0
-                ? `有 ${usage.hostsWithNcdWatch} 台远端主机装着 ncd-watch，先到组件页卸载再关`
+                ? `当前有 ${usage.hostsWithNcdWatch} 台远端主机已安装值守，请先在组件页卸载`
                 : null;
         default:
             return null;
@@ -233,5 +242,5 @@ export function featureOffWarning(key: FeatureKey, usage: FeatureUsage): string 
 
 export function appFrameworkOffBlock(frameworkId: string, usage: FeatureUsage): string | null {
     const n = usage.instancesByFramework[frameworkId] ?? 0;
-    return n > 0 ? `有 ${n} 个实例，先删掉再关` : null;
+    return n > 0 ? (n === 1 ? '已有 1 个实例，请先删除后再关闭' : `已有 ${n} 个实例，请先删除后再关闭`) : null;
 }

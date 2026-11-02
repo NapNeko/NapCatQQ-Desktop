@@ -1,8 +1,9 @@
-// 功能 Tab：可选功能模块开关。用不上的整块拿掉，侧栏和各页入口跟着少；
-// 关掉能省后台活的，每行下面写着省了什么。
+// 功能 Tab：可选功能模块开关，控制界面入口与后台探测资源。
+// 保持设置页统一美学：左引导线 + FieldRow 统一布局，受限项使用 Icon + Tooltip 提示。
 
-import type { ReactNode } from 'react';
-import { Switch } from '../../../shared/ui';
+import { AlertTriangle } from 'lucide-react';
+import { Switch, Tooltip, TooltipContent, TooltipTrigger } from '../../../shared/ui';
+import { ExpandPresence } from '../../../shared/ui/motion';
 import {
     FEATURE_GROUPS,
     appFrameworkOffBlock,
@@ -39,93 +40,118 @@ export function FeaturesTab({ draft, patchDraft }: Props) {
         const on = features[def.key];
         const blocked = on ? featureOffBlock(def.key, features, usage) : null;
         const warning = on ? null : featureOffWarning(def.key, usage);
+
         return (
             <FieldRow
                 key={def.key}
                 label={def.label}
-                description={
-                    <Description
-                        text={def.description}
-                        saves={def.saves}
-                        note={blocked ?? warning}
-                    />
-                }
+                description={<Description text={def.description} saves={def.saves} />}
             >
-                <Switch
-                    checked={on}
-                    disabled={!!blocked}
-                    onCheckedChange={(v) => patchDraft({ features: { ...features, [def.key]: v } })}
-                />
+                <div className="flex items-center gap-2">
+                    {(blocked || warning) && (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <button
+                                    type="button"
+                                    aria-label={blocked ?? warning ?? undefined}
+                                    className="inline-flex h-6 w-6 items-center justify-center rounded-full text-warning transition-colors hover:bg-warning/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                                >
+                                    <AlertTriangle size={14} strokeWidth={2.4} />
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="left" sideOffset={6}>
+                                {blocked ?? warning}
+                            </TooltipContent>
+                        </Tooltip>
+                    )}
+                    <Switch
+                        checked={on}
+                        disabled={!!blocked}
+                        onCheckedChange={(v) => patchDraft({ features: { ...features, [def.key]: v } })}
+                        aria-label={`切换 ${def.label}`}
+                    />
+                </div>
             </FieldRow>
         );
     };
 
     return (
         <SettingsTabSections>
-            {FEATURE_GROUPS.map((group) => (
-                <SettingsSection key={group.title} title={group.title}>
-                    {group.items.map(renderFeature)}
-                    {group.items.some((d) => d.key === 'apps') &&
-                        features.apps &&
-                        frameworks.map((m) => {
-                            const visible = isAppFrameworkVisible(features, m.id);
-                            const blocked = visible ? appFrameworkOffBlock(m.id, usage) : null;
-                            return (
-                                <FieldRow
-                                    key={m.id}
-                                    label={`应用端 · ${m.display_name}`}
-                                    description={
-                                        <Description
-                                            text={`关掉后组件页不列 ${m.display_name}，新建、导入时也不给选`}
-                                            note={blocked}
-                                        />
-                                    }
-                                >
-                                    <Switch
-                                        checked={visible}
-                                        disabled={!!blocked}
-                                        onCheckedChange={(v) =>
-                                            patchDraft({
-                                                features: setAppFrameworkVisible(features, m.id, v),
-                                            })
-                                        }
-                                    />
-                                </FieldRow>
-                            );
-                        })}
-                </SettingsSection>
-            ))}
+            {FEATURE_GROUPS.map((group) => {
+                const hasApps = group.items.some((d) => d.key === 'apps');
+
+                return (
+                    <SettingsSection
+                        key={group.title}
+                        title={group.title}
+                        description={group.description}
+                    >
+                        {group.items.map(renderFeature)}
+
+                        {hasApps && (
+                            <ExpandPresence visible={features.apps && frameworks.length > 0}>
+                                <div className="border-l border-border-subtle/80 pl-4 sm:pl-5 my-2">
+                                    <div className="flex flex-col divide-y divide-border-subtle/70">
+                                        {frameworks.map((m) => {
+                                            const visible = isAppFrameworkVisible(features, m.id);
+                                            const itemBlocked = visible ? appFrameworkOffBlock(m.id, usage) : null;
+
+                                            return (
+                                                <FieldRow
+                                                    key={m.id}
+                                                    label={m.display_name}
+                                                    description={m.description || '控制组件页与新建时的显示'}
+                                                >
+                                                    <div className="flex items-center gap-2">
+                                                        {itemBlocked && (
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <button
+                                                                        type="button"
+                                                                        aria-label={itemBlocked}
+                                                                        className="inline-flex h-6 w-6 items-center justify-center rounded-full text-warning transition-colors hover:bg-warning/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                                                                    >
+                                                                        <AlertTriangle size={13} strokeWidth={2.4} />
+                                                                    </button>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent side="left" sideOffset={6}>
+                                                                    {itemBlocked}
+                                                                </TooltipContent>
+                                                            </Tooltip>
+                                                        )}
+                                                        <Switch
+                                                            checked={visible}
+                                                            disabled={!!itemBlocked}
+                                                            onCheckedChange={(v) =>
+                                                                patchDraft({
+                                                                    features: setAppFrameworkVisible(features, m.id, v),
+                                                                })
+                                                            }
+                                                            aria-label={`切换 ${m.display_name}`}
+                                                        />
+                                                    </div>
+                                                </FieldRow>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </ExpandPresence>
+                        )}
+                    </SettingsSection>
+                );
+            })}
         </SettingsTabSections>
     );
 }
 
-function Description({
-    text,
-    saves,
-    note,
-}: {
-    text: string;
-    saves?: string;
-    note?: string | null;
-}) {
-    const extra: ReactNode[] = [];
-    if (saves)
-        extra.push(
-            <span key="saves" className="mt-0.5 block text-text-secondary">
-                关掉后：{saves}
-            </span>,
-        );
-    if (note)
-        extra.push(
-            <span key="note" className="mt-1 block text-warning">
-                {note}
-            </span>,
-        );
-    if (extra.length === 0) return <>{text}</>;
+function Description({ text, saves }: { text: string; saves?: string }) {
+    if (!saves) return <>{text}</>;
     return (
         <>
-            {text}
-            {extra}
+            <span>{text}</span>
+            <span className="mt-0.5 block text-[11.5px] text-text-tertiary">
+                关掉后：{saves}
+            </span>
         </>
     );
 }
