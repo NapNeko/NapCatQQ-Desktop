@@ -18,7 +18,6 @@ pub mod desktop_update;
 pub mod docker;
 pub mod exit;
 pub mod host_resolve;
-pub mod koishi;
 pub mod mcp;
 pub mod ncd_watch;
 pub mod network;
