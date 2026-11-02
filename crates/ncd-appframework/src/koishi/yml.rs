@@ -11,7 +11,6 @@ use ncd_domain::AppConfigIssue;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use ts_rs::TS;
 
 use super::manifest::KOISHI_DEFAULT_PORT;
 use crate::config_doc::IssueSink;
@@ -21,8 +20,7 @@ pub const SERVER_NAME: &str = "server";
 pub const CONSOLE_NAME: &str = "console";
 
 /// 插件树里的一个节点（插件或分组）
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/koishi/")]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KoishiPluginNode {
     /// 短名（`server` / `adapter-onebot` / `@scope/foo`）；分组为 `group`
     pub name: String,
@@ -30,10 +28,8 @@ pub struct KoishiPluginNode {
     pub ident: String,
     pub enabled: bool,
     /// `$if` / `$filter` / `$label` 之类的元信息，原样保留
-    #[ts(type = "Record<string, unknown>")]
     pub meta: Map<String, Value>,
     /// 插件配置；分组恒为空对象
-    #[ts(type = "Record<string, unknown>")]
     pub config: Map<String, Value>,
     /// 分组的子节点；插件恒为空
     pub children: Vec<KoishiPluginNode>,
@@ -90,14 +86,11 @@ impl KoishiPluginNode {
 }
 
 /// 类型化的 koishi.yml
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/koishi/")]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KoishiInstanceConfig {
     /// 根上 `plugins` 以外的键（全局设置：前缀、昵称、国际化、延迟…），按上游 `Context.Config` 的 schema 画
-    #[ts(type = "Record<string, unknown>")]
     pub global: Map<String, Value>,
     /// 入口分组自己的元信息（极少有）
-    #[ts(type = "Record<string, unknown>")]
     pub entry_meta: Map<String, Value>,
     pub plugins: Vec<KoishiPluginNode>,
 }

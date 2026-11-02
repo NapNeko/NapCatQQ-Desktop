@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use super::manifest::ASTRBOT_CMD_CONFIG;
 use crate::adapter::apply_with_backup_ex;
-use crate::config_doc::{DocumentSnapshot, read_documents, render_json_pretty, revision_of};
+use crate::config_doc::{render_json_pretty, revision_of};
 
 pub const DOC_CMD_CONFIG: &str = "cmd_config";
 
@@ -18,6 +18,7 @@ pub fn cmd_config_document() -> AppConfigDocument {
         rel_path: ASTRBOT_CMD_CONFIG.to_string(),
         format: AppConfigFormat::Json,
         hot_reload: false,
+        reload_note: None,
     }
 }
 
@@ -83,13 +84,6 @@ pub async fn save_cmd_config(
     })
     .await?;
     Ok(revision_of(&bytes))
-}
-
-pub async fn read_cmd_config_snapshots(
-    host: &dyn Host,
-    install_dir: &HostPath,
-) -> Result<Vec<DocumentSnapshot>, AppFrameworkError> {
-    read_documents(host, install_dir, &cmd_config_documents()).await
 }
 
 #[cfg(test)]

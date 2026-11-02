@@ -13,19 +13,12 @@ struct Node {
     symlink: bool,
 }
 
-type CommandHandler =
-    dyn Fn(&TestHost, &HostCommand) -> Result<CommandOutput, HostError> + Send + Sync;
-
 pub(crate) struct TestHost {
     id: String,
     nodes: Mutex<BTreeMap<String, Node>>,
     fail_once: Mutex<Option<String>>,
-    remove_fail_once: Mutex<Option<String>>,
-    command_handler: Mutex<Option<Arc<CommandHandler>>>,
-    commands: Mutex<Vec<HostCommand>>,
+    accesses: Mutex<BTreeMap<String, (usize, usize)>>,
     shell: ncd_host::shell::BashShell,
-    tunnel_port: Mutex<Option<u16>>,
-    tunnels: Mutex<Vec<TunnelSpec>>,
 }
 
 impl TestHost {
@@ -34,12 +27,8 @@ impl TestHost {
             id: id.into(),
             nodes: Mutex::new(BTreeMap::new()),
             fail_once: Mutex::new(None),
-            remove_fail_once: Mutex::new(None),
-            command_handler: Mutex::new(None),
-            commands: Mutex::new(Vec::new()),
+            accesses: Mutex::new(BTreeMap::new()),
             shell: ncd_host::shell::BashShell,
-            tunnel_port: Mutex::new(None),
-            tunnels: Mutex::new(Vec::new()),
         });
         host.nodes.lock().unwrap().insert(
             String::new(),
@@ -75,34 +64,17 @@ impl TestHost {
         );
     }
 
-    pub(crate) fn set_tunnel_port(&self, port: u16) {
-        *self.tunnel_port.lock().unwrap() = Some(port);
-    }
-
-    pub(crate) fn tunnel_requests(&self) -> Vec<TunnelSpec> {
-        self.tunnels.lock().unwrap().clone()
-    }
-
     pub(crate) fn fail_next_write(&self, path: &str) {
         *self.fail_once.lock().unwrap() = Some(path.into());
     }
 
-    pub(crate) fn fail_next_remove(&self, path: &str) {
-        *self.remove_fail_once.lock().unwrap() = Some(path.into());
-    }
-
-    pub(crate) fn set_command_handler(
-        &self,
-        handler: impl Fn(&TestHost, &HostCommand) -> Result<CommandOutput, HostError>
-        + Send
-        + Sync
-        + 'static,
-    ) {
-        *self.command_handler.lock().unwrap() = Some(Arc::new(handler));
-    }
-
-    pub(crate) fn commands(&self) -> Vec<HostCommand> {
-        self.commands.lock().unwrap().clone()
+    pub(crate) fn access_counts(&self, path: &str) -> (usize, usize) {
+        self.accesses
+            .lock()
+            .unwrap()
+            .get(path)
+            .copied()
+            .unwrap_or_default()
     }
 
     pub(crate) fn content(&self, path: &str) -> Option<Vec<u8>> {
@@ -132,6 +104,12 @@ impl Host for TestHost {
         &self.shell
     }
     async fn read_file(&self, path: &HostPath) -> Result<Bytes, HostError> {
+        self.accesses
+            .lock()
+            .unwrap()
+            .entry(path.as_posix().into())
+            .or_default()
+            .1 += 1;
         self.content(path.as_posix())
             .map(Bytes::from)
             .ok_or_else(|| HostError::PathNotFound { path: path.clone() })
@@ -186,14 +164,6 @@ impl Host for TestHost {
         Ok(())
     }
     async fn remove_file(&self, path: &HostPath) -> Result<(), HostError> {
-        let mut failure = self.remove_fail_once.lock().unwrap();
-        if failure.as_deref() == Some(path.as_posix()) {
-            failure.take();
-            return Err(HostError::PermissionDenied {
-                path: path.clone(),
-                operation: "remove",
-            });
-        }
         self.nodes.lock().unwrap().remove(path.as_posix());
         Ok(())
     }
@@ -214,6 +184,12 @@ impl Host for TestHost {
         })
     }
     async fn exists(&self, path: &HostPath) -> Result<bool, HostError> {
+        self.accesses
+            .lock()
+            .unwrap()
+            .entry(path.as_posix().into())
+            .or_default()
+            .0 += 1;
         Ok(self
             .nodes
             .lock()
@@ -243,23 +219,13 @@ impl Host for TestHost {
     async fn spawn(&self, _: HostCommand) -> Result<Box<dyn HostProcess>, HostError> {
         Err(HostError::Unsupported { operation: "spawn" })
     }
-    async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError> {
-        self.commands.lock().unwrap().push(cmd.clone());
-        let handler = self.command_handler.lock().unwrap().clone();
-        match handler {
-            Some(handler) => handler(self, &cmd),
-            None => Err(HostError::Unsupported { operation: "run" }),
-        }
+    async fn run_to_string(&self, _: HostCommand) -> Result<CommandOutput, HostError> {
+        Err(HostError::Unsupported { operation: "run" })
     }
-    async fn open_tunnel(&self, spec: TunnelSpec) -> Result<TunnelHandle, HostError> {
-        self.tunnels.lock().unwrap().push(spec);
-        self.tunnel_port
-            .lock()
-            .unwrap()
-            .map(|port| TunnelHandle::detached(port, 0))
-            .ok_or(HostError::Unsupported {
-                operation: "open_tunnel",
-            })
+    async fn open_tunnel(&self, _: TunnelSpec) -> Result<TunnelHandle, HostError> {
+        Err(HostError::Unsupported {
+            operation: "open_tunnel",
+        })
     }
 }
 
@@ -619,7 +585,7 @@ async fn failed_write_rolls_back_earlier_hosts_partial_write_and_new_files() {
     )
     .await
     .unwrap();
-    *second.fail_once.lock().unwrap() = Some("/apps/b/.env".into());
+    second.fail_next_write("/apps/b/.env");
     let committed = std::sync::atomic::AtomicBool::new(false);
     let error = plan
         .commit_with(async {

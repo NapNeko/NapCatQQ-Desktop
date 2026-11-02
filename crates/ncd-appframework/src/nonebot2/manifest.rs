@@ -65,10 +65,6 @@ pub fn nonebot2_manifest() -> AppFrameworkManifest {
         link_modes: vec![OneBotLinkMode::ReverseWs],
         component_id: NONEBOT2_COMPONENT_ID.to_string(),
         runtime_component_ids: vec!["uv".to_string()],
-        store_resources: vec![
-            ncd_domain::AppStoreResource::Adapter,
-            ncd_domain::AppStoreResource::Plugin,
-        ],
         has_install_renderer: false,
         webui_auth: ncd_domain::AppWebUiAuthKind::None,
         terms: Vec::new(),
@@ -94,12 +90,5 @@ mod tests {
             vec![AppPlacement::LocalNative, AppPlacement::RemoteNative]
         );
         assert!(!back.has_install_renderer);
-        assert_eq!(
-            back.store_resources,
-            vec![
-                ncd_domain::AppStoreResource::Adapter,
-                ncd_domain::AppStoreResource::Plugin
-            ]
-        );
     }
 }

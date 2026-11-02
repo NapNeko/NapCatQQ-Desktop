@@ -14,7 +14,6 @@ use ncd_domain::{AppConfigDocument, AppConfigFormat, AppConfigIssue};
 use ncd_host::{Host, HostPath};
 use ncd_traits::AppFrameworkError;
 use serde::{Deserialize, Serialize};
-use ts_rs::TS;
 
 use crate::adapter::apply_with_backup_ex;
 use crate::config_doc::{DocumentSnapshot, read_documents};
@@ -31,8 +30,7 @@ pub const DOC_ADAPTER: &str = "adapter";
 pub const DOC_DASHBOARD: &str = "dashboard";
 
 /// 协议 Bot 连过来的反向 WS 设置（`app/data/config.toml` 的 `[adapter]`）
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NeoBotAdapterConfig {
     /// onebot 或 local；只有 onebot 才有反向 WS 监听
     pub mode: String,
@@ -56,8 +54,7 @@ impl Default for NeoBotAdapterConfig {
 }
 
 /// 网页面板设置（`app/data/plugins_data/dashboard/config.toml`，平铺键）
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NeoBotDashboardConfig {
     pub host: String,
     pub port: u16,
@@ -72,8 +69,7 @@ impl Default for NeoBotDashboardConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NeoBotInstanceConfig {
     pub adapter: NeoBotAdapterConfig,
     pub dashboard: NeoBotDashboardConfig,
@@ -89,21 +85,6 @@ impl Default for NeoBotInstanceConfig {
 }
 
 impl NeoBotInstanceConfig {
-    /// 对接依赖的输入：口或 token 变了要重新对接
-    pub fn link_inputs_changed(&self, after: &Self) -> bool {
-        self.adapter.reverse_ws_port != after.adapter.reverse_ws_port
-            || self.adapter.reverse_ws_host != after.adapter.reverse_ws_host
-            || self.adapter.reverse_ws_access_token != after.adapter.reverse_ws_access_token
-            || self.adapter.mode != after.adapter.mode
-    }
-
-    /// 面板监听地址或端口变化需重启；OneBot 口变化要重新建立监听与对接
-    pub fn restart_inputs_changed(&self, after: &Self) -> bool {
-        self.adapter.reverse_ws_port != after.adapter.reverse_ws_port
-            || self.dashboard.port != after.dashboard.port
-            || self.dashboard.host != after.dashboard.host
-    }
-
     pub fn validate(&self) -> Vec<AppConfigIssue> {
         let mut issues = Vec::new();
         if self.adapter.reverse_ws_port == 0 {
@@ -170,8 +151,14 @@ fn config_doc(id: &str, rel: &str, format: AppConfigFormat) -> AppConfigDocument
         },
         rel_path: rel.to_string(),
         format,
-        // 面板 host / port 由 HTTP 服务启动时绑定，改文件不能立即换监听。
-        hot_reload: id == DOC_ADAPTER,
+        // config.reload 是显式命令；直接改文件不会进入该重载链路。
+        hot_reload: false,
+        reload_note: Some(if id == DOC_ADAPTER {
+            "直接保存文件不会自动重载；请在 NeoBot 执行 /reload，或重启实例。启动项仍需重启。"
+                .into()
+        } else {
+            "权限等部分配置会按请求重读；监听地址、端口等启动项需重启实例。".into()
+        }),
     }
 }
 
@@ -260,15 +247,6 @@ pub async fn read_neobot_config(
 ) -> Result<(NeoBotInstanceConfig, Vec<DocumentSnapshot>), AppFrameworkError> {
     let snaps = read_documents(host, install_dir, &neobot_config_documents()).await?;
     parse_neobot_config(&snaps).map(|config| (config, snaps))
-}
-
-pub async fn write_neobot_config(
-    host: &dyn Host,
-    install_dir: &HostPath,
-    config: &NeoBotInstanceConfig,
-    write_sidecar: bool,
-) -> Result<(NeoBotInstanceConfig, Vec<DocumentSnapshot>), AppFrameworkError> {
-    write_config_docs(host, install_dir, config, write_sidecar, true).await
 }
 
 /// 对接（apply_link）路径的写入：面板配置只在文件已存在时写。受管实例首装已
@@ -665,30 +643,6 @@ mod tests {
             Some(10001),
             "别的分区不能被碰"
         );
-    }
-
-    #[test]
-    fn link_and_restart_inputs_changes() {
-        let before = NeoBotInstanceConfig::default();
-        let mut after = before.clone();
-        after.adapter.reverse_ws_access_token = "new".to_string();
-        assert!(before.link_inputs_changed(&after));
-        assert!(!before.restart_inputs_changed(&after));
-
-        let mut port_change = before.clone();
-        port_change.adapter.reverse_ws_port = 9090;
-        assert!(before.link_inputs_changed(&port_change));
-        assert!(before.restart_inputs_changed(&port_change));
-
-        let mut dash = before.clone();
-        dash.dashboard.port = 9999;
-        assert!(!before.link_inputs_changed(&dash));
-        assert!(before.restart_inputs_changed(&dash), "换面板口需重启");
-
-        let mut host_change = before.clone();
-        host_change.dashboard.host = "0.0.0.0".to_string();
-        assert!(!before.link_inputs_changed(&host_change));
-        assert!(before.restart_inputs_changed(&host_change));
     }
 
     #[test]

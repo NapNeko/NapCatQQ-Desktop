@@ -1,4 +1,4 @@
-//! TRSS-Yunzai 适配器：manifest + Component + Integration + YAML 配置 + 插件索引商店。
+//! TRSS-Yunzai 安装、启停与 OneBot 对接。
 
 pub mod component;
 pub mod config;
@@ -6,7 +6,6 @@ pub mod git;
 mod integration;
 pub mod manifest;
 mod probe;
-pub mod store;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -14,40 +13,22 @@ use std::time::Duration;
 use async_trait::async_trait;
 use ncd_component::{Component, LaunchArgs};
 use ncd_domain::{
-    AppConfigDocument, AppFrameworkManifest, AppInstance, AppProjectProbe, AppStoreResource,
-    OneBotLinkPlan, TerminalSnippet,
+    AppConfigDocument, AppFrameworkManifest, AppInstance, AppProjectProbe, OneBotLinkPlan,
+    TerminalSnippet,
 };
 use ncd_host::{Host, HostCommand, HostPath, Locality, shell_single_quote};
 use ncd_traits::{AppFrameworkError, AppIntegration};
 
 pub use component::YunzaiComponent;
-pub use config::{
-    YunzaiBotConfig, YunzaiGroupConfig, YunzaiGroupDefaults, YunzaiGroupOverride,
-    YunzaiInstanceConfig, YunzaiOtherConfig, YunzaiRedisConfig, YunzaiRendererConfig,
-    YunzaiServerConfig, yunzai_config_documents,
-};
+pub use config::yunzai_config_documents;
 pub use integration::{YunzaiIntegration, link_server_yaml};
 pub use manifest::{YUNZAI_FRAMEWORK_ID, yunzai_manifest};
 
 use crate::adapter::{
-    AppComponentSpec, AppFrameworkAdapter, PluginLogSink, apply_with_backup_ex, restore_from_backup,
+    AppComponentSpec, AppFrameworkAdapter, apply_with_backup_ex, restore_from_backup,
 };
 use crate::adopt::{self, write_project_sidecar};
-use crate::config_doc::{
-    AppInstanceConfig, AppInstanceConfigEnvelope, DocumentSnapshot, combined_revision_of,
-};
-use crate::store::{
-    AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry, StoreMarketPart, StoreMarketText,
-};
-use manifest::{YUNZAI_JS_PLUGIN_DIR, YUNZAI_STDOUT_LOG};
-
-fn envelope(config: YunzaiInstanceConfig, snaps: &[DocumentSnapshot]) -> AppInstanceConfigEnvelope {
-    AppInstanceConfigEnvelope {
-        config: AppInstanceConfig::Yunzai(config),
-        revision: combined_revision_of(snaps),
-        documents: snaps.iter().map(DocumentSnapshot::revision_entry).collect(),
-    }
-}
+use manifest::YUNZAI_STDOUT_LOG;
 
 fn host_err(e: ncd_host::HostError) -> AppFrameworkError {
     AppFrameworkError::Host(e.to_string())
@@ -93,35 +74,8 @@ impl YunzaiAdapter {
         host: &dyn Host,
         instance: &AppInstance,
     ) -> Result<(u16, Vec<(String, String)>), AppFrameworkError> {
-        let root = Self::root(instance);
-        let snaps =
-            crate::config_doc::read_documents(host, &root, &yunzai_config_documents()).await?;
-        let sources = config::read_sources(host, &root, &snaps).await?;
-        let cfg = config::config_from_sources(&sources);
-        let mut headers = Vec::new();
-        if let Some(src) = sources.iter().find(|s| s.name == "server") {
-            if let Some(serde_yaml::Value::Mapping(auth)) = src
-                .effective
-                .iter()
-                .find(|(k, _)| k.as_str() == Some("auth"))
-                .map(|(_, v)| v)
-            {
-                for (k, v) in auth {
-                    let key = k
-                        .as_str()
-                        .map(str::to_string)
-                        .or_else(|| k.as_u64().map(|n| n.to_string()));
-                    let val = v
-                        .as_str()
-                        .map(str::to_string)
-                        .or_else(|| v.as_u64().map(|n| n.to_string()));
-                    if let (Some(k), Some(v)) = (key, val) {
-                        headers.push((k, v));
-                    }
-                }
-            }
-        }
-        Ok((cfg.server.port, headers))
+        let connection = config::read_server_connection(host, &Self::root(instance)).await?;
+        Ok((connection.port, connection.headers))
     }
 
     async fn local_exit(port: u16, headers: &[(String, String)]) -> bool {
@@ -314,8 +268,9 @@ impl AppFrameworkAdapter for YunzaiAdapter {
         host: &dyn Host,
         instance: &AppInstance,
     ) -> Result<Option<String>, AppFrameworkError> {
-        let (cfg, _) = config::read_yunzai_config(host, &Self::root(instance)).await?;
-        Ok(Some(cfg.server.access_token).filter(|t| !t.trim().is_empty()))
+        Ok(config::read_server_connection(host, &Self::root(instance))
+            .await?
+            .access_token())
     }
 
     async fn apply_link(
@@ -369,181 +324,6 @@ impl AppFrameworkAdapter for YunzaiAdapter {
     fn config_documents(&self, _instance: &AppInstance) -> Vec<AppConfigDocument> {
         yunzai_config_documents()
     }
-
-    async fn read_config(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-    ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
-        let (config, snaps) = config::read_yunzai_config(host, &Self::root(instance)).await?;
-        Ok(envelope(config, &snaps))
-    }
-
-    async fn write_config(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        config: &AppInstanceConfig,
-    ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
-        let AppInstanceConfig::Yunzai(next) = config else {
-            return Err(AppFrameworkError::Validation("写入的不是云崽配置".into()));
-        };
-        let root = Self::root(instance);
-        let (_, current) = config::read_yunzai_config(host, &root).await?;
-        let (config, snaps) = config::write_yunzai_config(
-            host,
-            &root,
-            next,
-            &current,
-            write_project_sidecar(instance),
-        )
-        .await?;
-        Ok(envelope(config, &snaps))
-    }
-
-    fn find_document(
-        &self,
-        instance: &AppInstance,
-        doc_id: &str,
-    ) -> Result<AppConfigDocument, AppFrameworkError> {
-        if let Some((plugin, rel)) = store::parse_plugin_doc_id(doc_id) {
-            return store::plugin_config_document(plugin, rel);
-        }
-        self.config_documents(instance)
-            .into_iter()
-            .find(|d| d.id == doc_id)
-            .ok_or_else(|| AppFrameworkError::Validation(format!("未知的配置文档: {doc_id}")))
-    }
-
-    async fn list_installed(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        resource: AppStoreResource,
-    ) -> Result<Vec<AppStoreInstalled>, AppFrameworkError> {
-        if resource != AppStoreResource::Plugin {
-            return Ok(Vec::new());
-        }
-        store::list_installed(host, instance).await
-    }
-
-    async fn install_store_item(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        entry: &AppStoreMarketEntry,
-        log: Option<&PluginLogSink>,
-    ) -> Result<(), AppFrameworkError> {
-        match entry.flavor {
-            AppStoreFlavor::Git => store::install_git_plugin(host, instance, entry, log).await,
-            // 单 JS 由编排层按 files 下载；走到这里是条目本身就没有能下的文件
-            _ => Err(AppFrameworkError::Validation(format!(
-                "{} 在索引里没有能直接下载的 .js 地址，去它的主页手动装",
-                entry.name
-            ))),
-        }
-    }
-
-    async fn update_store_item(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        entry: &AppStoreMarketEntry,
-        log: Option<&PluginLogSink>,
-    ) -> Result<(), AppFrameworkError> {
-        match entry.flavor {
-            AppStoreFlavor::Git => store::update_git_plugin(host, instance, &entry.id, log).await,
-            _ => self.install_store_item(host, instance, entry, log).await,
-        }
-    }
-
-    async fn uninstall_store_item(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        id: &str,
-        flavor: AppStoreFlavor,
-        _resource: AppStoreResource,
-        log: Option<&PluginLogSink>,
-    ) -> Result<(), AppFrameworkError> {
-        match flavor {
-            AppStoreFlavor::App => store::remove_js_plugin(host, instance, id, log).await,
-            _ => store::remove_git_plugin(host, instance, id, log).await,
-        }
-    }
-
-    async fn set_store_enabled(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        id: &str,
-        _resource: AppStoreResource,
-        enabled: bool,
-        _overwrite: bool,
-    ) -> Result<(), AppFrameworkError> {
-        if !id.ends_with(".js") {
-            return Err(AppFrameworkError::Validation(
-                "目录插件不能单独停用（云崽按目录整个加载），不想要就卸载".into(),
-            ));
-        }
-        store::set_js_enabled(host, instance, id, enabled).await
-    }
-
-    async fn list_plugin_config_docs(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        plugin_name: &str,
-    ) -> Result<Vec<AppConfigDocument>, AppFrameworkError> {
-        if plugin_name.ends_with(".js") {
-            return Ok(Vec::new());
-        }
-        store::list_plugin_config_docs(host, instance, plugin_name).await
-    }
-
-    async fn confirm_store_item(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        entry: &AppStoreMarketEntry,
-    ) -> Result<(), AppFrameworkError> {
-        store::confirm_on_disk(host, instance, entry).await
-    }
-
-    fn store_market_cache_key(&self, resource: AppStoreResource) -> Option<&'static str> {
-        (resource == AppStoreResource::Plugin).then_some(store::YUNZAI_MARKET_CACHE_KEY)
-    }
-
-    fn store_market_urls(&self, _resource: AppStoreResource) -> Vec<String> {
-        Vec::new()
-    }
-
-    fn store_market_parts(&self, resource: AppStoreResource) -> Vec<StoreMarketPart> {
-        match resource {
-            AppStoreResource::Plugin => store::yunzai_market_parts(),
-            AppStoreResource::Adapter => Vec::new(),
-        }
-    }
-
-    fn parse_store_market_parts(
-        &self,
-        resource: AppStoreResource,
-        parts: &[StoreMarketText],
-    ) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
-        match resource {
-            AppStoreResource::Plugin => Ok(store::parse_index(parts)),
-            AppStoreResource::Adapter => Ok(Vec::new()),
-        }
-    }
-
-    fn store_app_file_dest(&self, instance: &AppInstance, basename: &str) -> Option<HostPath> {
-        store::reject_unsafe_name(basename).ok()?;
-        Some(
-            Self::root(instance)
-                .join(YUNZAI_JS_PLUGIN_DIR)
-                .join(basename),
-        )
-    }
 }
 
 #[cfg(test)]
@@ -561,28 +341,5 @@ mod tests {
         assert!(!remote_exit_sent("rc=127"));
         assert!(!remote_exit_sent("rc=0 code=401"));
         assert!(!remote_exit_sent(""));
-    }
-
-    #[test]
-    fn store_is_split_into_index_parts() {
-        let adapter = YunzaiAdapter::new();
-        assert_eq!(
-            adapter.store_market_parts(AppStoreResource::Plugin).len(),
-            5
-        );
-        assert!(
-            adapter
-                .store_market_urls(AppStoreResource::Plugin)
-                .is_empty()
-        );
-        assert!(
-            adapter
-                .store_market_parts(AppStoreResource::Adapter)
-                .is_empty()
-        );
-        assert_eq!(
-            adapter.store_market_cache_key(AppStoreResource::Plugin),
-            Some("yunzai-plugins")
-        );
     }
 }

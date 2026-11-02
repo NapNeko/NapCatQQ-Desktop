@@ -315,7 +315,7 @@ builtin_plugins = ["echo"]
         )
     }
 
-    /// 旧硬编码 V11、无版本戳的动态入口、或 `# ncd-managed-bot-py` 落后于当前模板，启动时重写
+    /// 旧硬编码 V11、无版本戳的动态入口、或 `# ncd-managed-bot-py` 落后于当前模板，重装时更新
     /// 只改桌面端自己写的入口。官方教程 / 真实项目的 `from nonebot.adapters.onebot.v11 import` 不能动。
     pub fn bot_py_needs_rewrite(text: &str) -> bool {
         const BOT_PY_REV: u32 = 2;

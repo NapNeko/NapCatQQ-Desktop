@@ -6,8 +6,7 @@
 //! - 官方不做平台市场；商店只代管 `data/plugins/`
 
 use ncd_domain::{
-    AppFrameworkId, AppFrameworkManifest, AppPlacement, AppStoreResource, AppWebUiAuthKind,
-    OneBotLinkMode,
+    AppFrameworkId, AppFrameworkManifest, AppPlacement, AppWebUiAuthKind, OneBotLinkMode,
 };
 
 pub const ASTRBOT_FRAMEWORK_ID: &str = "astrbot";
@@ -50,7 +49,6 @@ pub fn astrbot_manifest() -> AppFrameworkManifest {
         link_modes: vec![OneBotLinkMode::ReverseWs],
         component_id: ASTRBOT_COMPONENT_ID.to_string(),
         runtime_component_ids: vec!["uv".to_string()],
-        store_resources: vec![AppStoreResource::Plugin],
         has_install_renderer: false,
         webui_auth: AppWebUiAuthKind::UserPassword,
         terms: Vec::new(),
@@ -71,7 +69,6 @@ mod tests {
         assert_eq!(back.default_port, 6199);
         assert!(back.has_webui);
         assert_eq!(back.link_modes, vec![OneBotLinkMode::ReverseWs]);
-        assert_eq!(back.store_resources, vec![AppStoreResource::Plugin]);
         assert!(!back.has_install_renderer);
         assert_eq!(back.webui_auth, AppWebUiAuthKind::UserPassword);
     }

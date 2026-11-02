@@ -174,7 +174,7 @@ impl YunzaiComponent {
 
     /// 商店装插件时拿不到组件目录：托管的 MinGit 路径记在实例里，PATH 上的 git 不用记
     async fn write_git_marker(&self, host: &dyn Host, git: &GitTool) -> Result<(), ActionError> {
-        let marker = self.install_dir.join(super::store::GIT_MARKER_FILE);
+        let marker = self.install_dir.join(".ncd-git");
         if git.dir.is_some() {
             host.create_dir_all(&self.install_dir).await?;
             host.write_file(&marker, format!("{}\n", git.program).as_bytes())

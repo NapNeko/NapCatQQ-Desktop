@@ -2,8 +2,7 @@
 //! 只由对接写（打开、指向协议 Bot 的专属 WS 服务、带上 token），解绑时关掉。
 
 use serde::{Deserialize, Serialize};
-use toml_edit::{Array, DocumentMut};
-use ts_rs::TS;
+use toml_edit::DocumentMut;
 
 use super::super::manifest::ADAPTER_CONFIG_VERSION;
 use super::{parse_doc, parse_table, port_of, set_value, sub};
@@ -12,9 +11,8 @@ use super::{parse_doc, parse_table, port_of, set_value, sub};
 const DEFAULT_NAPCAT_HOST: &str = "127.0.0.1";
 const DEFAULT_NAPCAT_PORT: u16 = 3001;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum MaiBotListMode {
     /// 上游默认：只收名单里的；名单空着就一条都不收
     #[default]
@@ -39,8 +37,7 @@ impl MaiBotListMode {
 }
 
 /// 适配器 `[chat]`：哪些群聊 / 私聊的消息交给麦麦
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MaiBotChatFilter {
     pub enable_chat_list_filter: bool,
     pub group_list_type: MaiBotListMode,
@@ -75,12 +72,10 @@ impl MaiBotChatFilter {
 }
 
 /// NapCat 适配器插件的现状；连接字段只读，由对接写
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MaiBotAdapterConfig {
     pub enabled: bool,
     pub napcat_host: String,
-    #[ts(type = "number")]
     pub napcat_port: u16,
     pub has_token: bool,
     pub chat: MaiBotChatFilter,
@@ -146,10 +141,6 @@ pub fn read_adapter_token(text: Option<&str>) -> Option<String> {
     str_of(sub(&root, "napcat_server"), "token").filter(|s| !s.is_empty())
 }
 
-fn string_array(items: &[String]) -> toml_edit::Value {
-    toml_edit::Value::Array(items.iter().map(|s| s.trim()).collect::<Array>())
-}
-
 /// 非空的插件配置缺 `plugin.config_version` 时上游插件运行时直接报错不加载，写之前先补上
 fn ensure_adapter_version(doc: &mut DocumentMut) {
     let has = doc
@@ -165,48 +156,6 @@ fn ensure_adapter_version(doc: &mut DocumentMut) {
             ADAPTER_CONFIG_VERSION.into(),
         );
     }
-}
-
-pub fn write_adapter_chat(text: Option<&str>, chat: &MaiBotChatFilter) -> Result<String, String> {
-    let mut doc = parse_doc(text)?;
-    ensure_adapter_version(&mut doc);
-    set_value(
-        &mut doc,
-        "chat",
-        "enable_chat_list_filter",
-        chat.enable_chat_list_filter.into(),
-    );
-    set_value(
-        &mut doc,
-        "chat",
-        "group_list_type",
-        chat.group_list_type.as_str().into(),
-    );
-    set_value(
-        &mut doc,
-        "chat",
-        "group_list",
-        string_array(&chat.group_list),
-    );
-    set_value(
-        &mut doc,
-        "chat",
-        "private_list_type",
-        chat.private_list_type.as_str().into(),
-    );
-    set_value(
-        &mut doc,
-        "chat",
-        "private_list",
-        string_array(&chat.private_list),
-    );
-    set_value(
-        &mut doc,
-        "chat",
-        "ban_user_id",
-        string_array(&chat.ban_user_id),
-    );
-    Ok(doc.to_string())
 }
 
 /// 对接：打开适配器并指向协议 Bot 的专属 WS 服务
@@ -262,22 +211,5 @@ mod tests {
         let a = read_adapter_config(Some(&off));
         assert!(!a.enabled);
         assert_eq!(a.napcat_port, 23456, "解绑不抹连接字段");
-    }
-
-    #[test]
-    fn chat_write_keeps_unknown_sections_and_existing_version() {
-        let before = "[plugin]\nenabled = true\nconfig_version = \"0.2.0\"\n\n[notice]\npoke = false\n\n[chat]\ngroup_list = [123456, \"7890\"]\n";
-        let a = read_adapter_config(Some(before));
-        assert_eq!(a.chat.group_list, vec!["123456", "7890"], "手写数字也认");
-        let mut chat = a.chat.clone();
-        chat.group_list.push("42".into());
-        chat.group_list_type = MaiBotListMode::Blacklist;
-        let after = write_adapter_chat(Some(before), &chat).unwrap();
-        assert!(after.contains("config_version = \"0.2.0\""), "{after}");
-        assert!(after.contains("[notice]\npoke = false"));
-        let back = read_adapter_config(Some(&after));
-        assert_eq!(back.chat.group_list, vec!["123456", "7890", "42"]);
-        assert_eq!(back.chat.group_list_type, MaiBotListMode::Blacklist);
-        assert!(back.enabled);
     }
 }

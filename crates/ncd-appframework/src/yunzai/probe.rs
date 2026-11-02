@@ -5,7 +5,7 @@ use ncd_domain::{AppFrameworkId, AppProjectProbe};
 use ncd_host::{Host, HostPath};
 use ncd_traits::AppFrameworkError;
 
-use super::config::{config_rel, read_yunzai_config};
+use super::config::{config_rel, read_effective_config, read_server_connection};
 use super::manifest::{YUNZAI_FRAMEWORK_ID, YUNZAI_PACKAGE_JSON, YUNZAI_PACKAGE_NAME};
 
 async fn read_text(host: &dyn Host, path: &HostPath) -> Result<Option<String>, AppFrameworkError> {
@@ -66,7 +66,8 @@ pub async fn probe_yunzai(
     if !ready {
         warnings.push("还没装依赖，导入后会先装一遍".into());
     }
-    let (cfg, _) = read_yunzai_config(host, path).await?;
+    let connection = read_server_connection(host, path).await?;
+    let redis = read_effective_config(host, path, "redis").await?;
     let has_server_yaml = host
         .exists(&path.join(config_rel("server")))
         .await
@@ -74,15 +75,27 @@ pub async fn probe_yunzai(
     if !has_server_yaml {
         warnings.push("还没跑过（没有 config/config），端口按默认 2536 算".into());
     }
-    if cfg.redis.path == "redis-server" && !host.command_exists("redis-server").await {
+    if redis
+        .get(serde_yaml::Value::String("path".into()))
+        .and_then(serde_yaml::Value::as_str)
+        .unwrap_or("redis-server")
+        == "redis-server"
+        && !host.command_exists("redis-server").await
+    {
         warnings.push(
             "redis.yaml 里的 redis-server 在这台机器上找不到，导入时会指向桌面端装的 Redis".into(),
         );
     }
-    if !cfg.server.extra_auth_headers.is_empty() {
+    let extra_headers: Vec<_> = connection
+        .headers
+        .iter()
+        .map(|(name, _)| name.as_str())
+        .filter(|name| !name.eq_ignore_ascii_case(super::manifest::YUNZAI_AUTH_HEADER))
+        .collect();
+    if !extra_headers.is_empty() {
         warnings.push(format!(
             "server.yaml 的 auth 里还有 {}，对接时只留 Authorization（NapCat 只带这一个）",
-            cfg.server.extra_auth_headers.join("、")
+            extra_headers.join("、")
         ));
     }
 
@@ -90,7 +103,7 @@ pub async fn probe_yunzai(
         framework_id: AppFrameworkId::new(YUNZAI_FRAMEWORK_ID),
         path: path.as_posix().to_string(),
         display_name: path.file_name().unwrap_or("TRSS-Yunzai").to_string(),
-        port: Some(cfg.server.port).filter(|p| *p > 0),
+        port: Some(connection.port),
         version,
         env_rel_path: config_rel("server"),
         environment: String::new(),

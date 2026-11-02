@@ -16,15 +16,11 @@ use ncd_domain::{
     AppConfigDocument, AppFrameworkManifest, AppInstance, AppProjectProbe, OneBotLinkPlan,
     TerminalSnippet,
 };
-use ncd_host::remote::TunnelSpec;
 use ncd_host::{Host, HostCommand, HostPath, Locality};
 use ncd_traits::{AppFrameworkError, AppIntegration};
 
 pub use component::NeoBotComponent;
-pub use config::{
-    DOC_ADAPTER, DOC_DASHBOARD, NeoBotAdapterConfig, NeoBotDashboardConfig, NeoBotInstanceConfig,
-    neobot_config_documents,
-};
+pub use config::neobot_config_documents;
 pub use control::{MIN_VERSION_WITH_SHUTDOWN_ENDPOINT, ShutdownRequest};
 pub use integration::NeoBotIntegration;
 pub use manifest::{
@@ -33,28 +29,12 @@ pub use manifest::{
 pub use probe::probe_neobot;
 pub use versions::{PackageVersions, fetch_versions, parse_versions};
 
-use crate::adapter::{
-    AppComponentSpec, AppFrameworkAdapter, AppPanelOutcomeKind, AppPanelResult, restore_from_backup,
-};
+use crate::adapter::{AppComponentSpec, AppFrameworkAdapter, restore_from_backup};
 use crate::adopt::write_project_sidecar;
-use crate::config_doc::{
-    AppInstanceConfig, AppInstanceConfigEnvelope, DocumentSnapshot, combined_revision_of,
-};
 use crate::terminal;
-
-fn envelope(config: NeoBotInstanceConfig, snaps: &[DocumentSnapshot]) -> AppInstanceConfigEnvelope {
-    AppInstanceConfigEnvelope {
-        config: AppInstanceConfig::NeoBot(config),
-        revision: combined_revision_of(snaps),
-        documents: snaps.iter().map(DocumentSnapshot::revision_entry).collect(),
-    }
-}
 
 pub struct NeoBotAdapter {
     integration: NeoBotIntegration,
-    /// 面板会话（token + CSRF）。适配器在注册表里活一个进程周期，所以这里缓存得住：
-    /// 登录要过 PBKDF2-HMAC-SHA256（24 万次迭代），每个请求都重登一遍太浪费。
-    sessions: std::sync::Arc<control::PanelSessions>,
 }
 
 impl Default for NeoBotAdapter {
@@ -67,7 +47,6 @@ impl NeoBotAdapter {
     pub fn new() -> Self {
         Self {
             integration: NeoBotIntegration::new(),
-            sessions: std::sync::Arc::new(control::PanelSessions::new()),
         }
     }
 
@@ -110,6 +89,20 @@ fn dashboard_port_for(_spec: &AppComponentSpec) -> u16 {
 
 #[async_trait]
 impl AppFrameworkAdapter for NeoBotAdapter {
+    async fn read_webui_endpoint(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+    ) -> Result<(u16, String), AppFrameworkError> {
+        let port = control::dashboard_port(
+            host,
+            &Self::install_dir(instance),
+            manifest::NEOBOT_DEFAULT_DASHBOARD_PORT,
+        )
+        .await;
+        Ok((port, String::new()))
+    }
+
     fn manifest(&self) -> &AppFrameworkManifest {
         self.integration.manifest()
     }
@@ -130,77 +123,6 @@ impl AppFrameworkAdapter for NeoBotAdapter {
             .await
             .map(Some)
             .map_err(|e| AppFrameworkError::Integration(format!("查 PyPI 版本失败：{e}")))
-    }
-
-    /// NeoBot 面板转发：面板口从实例配置读（与 OneBot 口是两个口），
-    /// 密码是用户在桌面端填过一次的那个（密钥库里的「面板密码」）。
-    async fn panel_request(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        password: Option<&str>,
-        method: &str,
-        path: &str,
-        body: Option<serde_json::Value>,
-    ) -> Result<Option<AppPanelResult>, AppFrameworkError> {
-        let root = Self::install_dir(instance);
-        let port =
-            control::dashboard_port(host, &root, manifest::NEOBOT_DEFAULT_DASHBOARD_PORT).await;
-        // 远端口必须经该主机的 SSH 隧道，不能直接命中本机同端口的服务。
-        let tunnel = if host.locality() == Locality::Remote {
-            match host.open_tunnel(TunnelSpec::local_to_remote(0, port)).await {
-                Ok(tunnel) => Some(tunnel),
-                Err(error) => {
-                    return Ok(Some(AppPanelResult::err(
-                        AppPanelOutcomeKind::Unreachable,
-                        format!("无法建立 NeoBot 面板 SSH 隧道：{error}"),
-                    )));
-                }
-            }
-        } else {
-            None
-        };
-        let port = tunnel.as_ref().map_or(port, |tunnel| tunnel.local_port());
-        let outcome = control::panel_call(
-            &self.sessions,
-            instance.id.as_str(),
-            port,
-            password,
-            method,
-            path,
-            body,
-        )
-        .await;
-        drop(tunnel);
-        Ok(Some(match outcome {
-            control::PanelOutcome::Ok(v) => AppPanelResult::ok(v),
-            control::PanelOutcome::Unauthorized => AppPanelResult::err(
-                AppPanelOutcomeKind::Unauthorized,
-                "面板凭据不可用：请先在本页填写面板密码",
-            ),
-            control::PanelOutcome::Unreachable(e) => {
-                AppPanelResult::err(AppPanelOutcomeKind::Unreachable, format!("面板打不通：{e}"))
-            }
-            control::PanelOutcome::NotFound => AppPanelResult::err(
-                AppPanelOutcomeKind::NotFound,
-                "面板没有这个接口：当前 NeoBot 版本还不提供它，需要更新的版本",
-            ),
-            control::PanelOutcome::Failed(e) => AppPanelResult::err(AppPanelOutcomeKind::Failed, e),
-            control::PanelOutcome::Rejected {
-                status,
-                message,
-                data,
-            } => AppPanelResult {
-                kind: AppPanelOutcomeKind::Failed,
-                data,
-                message: Some(message),
-                status: Some(status),
-            },
-        }))
-    }
-
-    fn forget_panel_session(&self, instance_id: &str) {
-        self.sessions.clear(instance_id);
     }
 
     async fn probe_project(
@@ -404,32 +326,6 @@ impl AppFrameworkAdapter for NeoBotAdapter {
         neobot_config_documents()
     }
 
-    async fn read_config(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-    ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
-        let (cfg, snaps) = config::read_neobot_config(host, &Self::install_dir(instance)).await?;
-        Ok(envelope(cfg, &snaps))
-    }
-
-    async fn write_config(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        config: &AppInstanceConfig,
-    ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
-        let AppInstanceConfig::NeoBot(next) = config else {
-            return Err(AppFrameworkError::Validation(
-                "写入的不是 NeoBot 配置".to_string(),
-            ));
-        };
-        let root = Self::install_dir(instance);
-        let (cfg, snaps) =
-            config::write_neobot_config(host, &root, next, write_project_sidecar(instance)).await?;
-        Ok(envelope(cfg, &snaps))
-    }
-
     fn webui_fallback_port(&self, _instance: &AppInstance) -> u16 {
         manifest::NEOBOT_DEFAULT_DASHBOARD_PORT
     }
@@ -445,9 +341,6 @@ impl AppFrameworkAdapter for NeoBotAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config_backup::tests::TestHost;
-    use wiremock::matchers::{header, method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn remote_instance() -> AppInstance {
         serde_json::from_value(serde_json::json!({
@@ -459,88 +352,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn remote_panel_uses_the_host_tunnel_and_configured_dashboard_port() {
-        let server = MockServer::start().await;
-        Mock::given(method("POST"))
-            .and(path("/api/auth/login"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "token":"remote-token", "csrf_token":"remote-csrf"
-            })))
-            .expect(1)
-            .mount(&server)
-            .await;
-        Mock::given(method("GET"))
-            .and(path("/api/admin/power"))
-            .and(header("X-Token", "remote-token"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"ok":true,"state":"running"})),
-            )
-            .expect(1)
-            .mount(&server)
-            .await;
-        let host = TestHost::new("remote:example");
-        host.put(
-            "/apps/neobot/app/data/config.toml",
-            b"[adapter]\nmode = 'onebot'\n",
-        );
+    async fn webui_endpoint_ignores_unrelated_adapter_config() {
+        let host = crate::config_backup::tests::TestHost::new("remote:example");
+        host.put("/apps/neobot/app/data/config.toml", b"invalid = [");
         host.put(
             "/apps/neobot/app/data/plugins_data/dashboard/config.toml",
             b"port = 43123\n",
         );
-        host.set_tunnel_port(server.address().port());
-        let result = NeoBotAdapter::new()
-            .panel_request(
-                host.as_ref(),
-                &remote_instance(),
-                Some("test-password"),
-                "GET",
-                "/api/admin/power",
-                None,
-            )
+        let endpoint = NeoBotAdapter::new()
+            .read_webui_endpoint(host.as_ref(), &remote_instance())
             .await
-            .unwrap()
             .unwrap();
-        assert_eq!(result.kind, AppPanelOutcomeKind::Ok);
-        assert_eq!(
-            host.tunnel_requests(),
-            vec![TunnelSpec::local_to_remote(0, 43123)]
-        );
-        assert_eq!(result.data.unwrap()["state"], "running");
-    }
-
-    #[tokio::test]
-    async fn failed_remote_tunnel_never_falls_back_to_a_local_service() {
-        let local_service = MockServer::start().await;
-        Mock::given(method("POST"))
-            .and(path("/api/auth/login"))
-            .respond_with(ResponseTemplate::new(200))
-            .expect(0)
-            .mount(&local_service)
-            .await;
-        let host = TestHost::new("remote:example");
-        host.put(
-            "/apps/neobot/app/data/config.toml",
-            b"[adapter]\nmode = 'onebot'\n",
-        );
-        host.put(
-            "/apps/neobot/app/data/plugins_data/dashboard/config.toml",
-            format!("port = {}\n", local_service.address().port()).as_bytes(),
-        );
-        let result = NeoBotAdapter::new()
-            .panel_request(
-                host.as_ref(),
-                &remote_instance(),
-                Some("test-password"),
-                "GET",
-                "/api/admin/power",
-                None,
-            )
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(result.kind, AppPanelOutcomeKind::Unreachable);
-        assert!(result.message.unwrap().contains("SSH 隧道"));
+        assert_eq!(endpoint, (43123, String::new()));
     }
 
     /// 版本闸门：只有 1.2.3 及以上才走优雅关闭，其余返回 false 让编排层直接收树。

@@ -66,28 +66,6 @@ async fn koishi_live_smoke() {
     let (cfg, _) = a.read_yml(&host, &inst).await.unwrap();
     inst.port = cfg.listen_port();
 
-    let status = a.status(&inst, inst.port).await;
-    eprintln!("status: {status:?}");
-    assert_eq!(status.gate, KoishiRuntimeGate::Ok);
-
-    let schemas = a
-        .plugin_schemas(
-            &host,
-            &inst,
-            &["".into(), "adapter-onebot".into(), "nope-x".into()],
-        )
-        .await
-        .unwrap();
-    assert!(schemas[0].schema.is_some(), "全局设置 schema");
-    assert!(schemas[1].schema.is_some(), "{:?}", schemas[1].error);
-    assert!(schemas[2].error.is_some());
-    let pkgs = a.installed_packages(&host, &inst).await.unwrap();
-    eprintln!("packages: {}", pkgs.len());
-    assert!(
-        pkgs.iter()
-            .any(|p| p.package == "koishi-plugin-adapter-onebot")
-    );
-
     let plan = KoishiIntegration::new()
         .plan_link(&inst, &bot(10001), "tok")
         .unwrap();
@@ -108,11 +86,8 @@ async fn koishi_live_smoke() {
         .insert("X-Client-Role", "Universal".parse().unwrap());
     let (ws, resp) = tokio_tungstenite::connect_async(req).await.unwrap();
     eprintln!("handshake: {}", resp.status());
-    tokio::time::sleep(std::time::Duration::from_secs(6)).await;
-    let status = a.status(&inst, inst.port).await;
-    eprintln!("bots after link: {:?}", status.bots);
+    assert_eq!(resp.status().as_u16(), 101);
     drop(ws);
-    assert!(status.bots.iter().any(|b| b.self_id == "10001"));
 
     a.unlink(&host, &inst).await.unwrap();
     let (after, _) = a.read_yml(&host, &inst).await.unwrap();

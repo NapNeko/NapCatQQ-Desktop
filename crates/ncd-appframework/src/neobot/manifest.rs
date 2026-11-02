@@ -83,7 +83,6 @@ pub fn neobot_manifest() -> AppFrameworkManifest {
         link_modes: vec![OneBotLinkMode::ReverseWs],
         component_id: NEOBOT_COMPONENT_ID.to_string(),
         runtime_component_ids: vec!["uv".to_string()],
-        store_resources: Vec::new(),
         has_install_renderer: false,
         // 面板密码由用户在面板上首次设置；桌面端读不到 NeoBot 的密码存储格式
         // （plugins_data/dashboard/auth.json 由面板自己管理），所以不接管账号，
@@ -115,10 +114,6 @@ mod tests {
         assert_eq!(back.runtime_component_ids, vec!["uv".to_string()]);
         assert_eq!(back.webui_auth, AppWebUiAuthKind::None);
         assert!(!back.has_install_renderer);
-        assert!(
-            back.store_resources.is_empty(),
-            "NeoBot 面板没有插件市场索引：装第三方插件是贴一个 GitHub 仓库地址（见 dashboard/api.py 的 plugins_install），而桌面端商店要的是「市场 URL + 解析器」，形状对不上，所以这里声明为空"
-        );
         assert!(back.terms.is_empty());
     }
 

@@ -1,29 +1,16 @@
-//! MaiBot 的类型化配置：两份主配置全部字段 + NapCat 适配器的聊天名单 + WebUI token。
-//!
-//! - `config/bot_config.toml`、`config/model_config.toml`：全字段（结构体由上游类生成，见
-//!   `schema`）。停止时 [`files`] 原位差量写，运行中由适配器走麦麦自己的 WebUI 接口写
-//! - `plugins/MaiBot-Napcat-Adapter/config.toml`：`[chat]` 名单；`[plugin]` / `[napcat_server]` 只由对接写
-//! - `data/webui.json`：WebUI token，只读
-//!
-//! 实例 `port` 跟着 `bot.webui.port`；两个口都只在这一处，不另存副本。
+//! MaiBot 安装端口、WebUI 密钥、对接字段与备份清单。
 
 mod adapter;
-pub mod files;
-mod validate;
 
 use ncd_domain::{AppConfigDocument, AppConfigFormat};
-use serde::{Deserialize, Serialize};
 use toml_edit::{DocumentMut, Item};
-use ts_rs::TS;
 
 pub use adapter::{
     MaiBotAdapterConfig, MaiBotChatFilter, MaiBotListMode, read_adapter_config, read_adapter_token,
-    write_adapter_chat, write_adapter_disabled, write_adapter_link,
+    write_adapter_disabled, write_adapter_link,
 };
-pub use validate::validate;
 
 use super::manifest::{ADAPTER_CONFIG, BOT_CONFIG, MAIBOT_DEFAULT_WEBUI_PORT, MODEL_CONFIG};
-use super::schema::{MaiBotBotConfigFile, MaiBotModelConfigFile};
 
 pub const DOC_BOT_CONFIG: &str = "bot_config";
 pub const DOC_MODEL_CONFIG: &str = "model_config";
@@ -39,8 +26,11 @@ pub fn maibot_config_documents() -> Vec<AppConfigDocument> {
             label: "主配置 bot_config.toml".to_string(),
             rel_path: BOT_CONFIG.to_string(),
             format: AppConfigFormat::Toml,
-            // 上游盯着这份热加载；端口、日志这类启动时才读的字段由 restart_inputs_changed 单独判
             hot_reload: true,
+            reload_note: Some(
+                "多数配置支持自动热重载；监听地址、端口及其他启动项需重启，请查看实例日志确认。"
+                    .into(),
+            ),
         },
         AppConfigDocument {
             id: DOC_MODEL_CONFIG.to_string(),
@@ -48,6 +38,7 @@ pub fn maibot_config_documents() -> Vec<AppConfigDocument> {
             rel_path: MODEL_CONFIG.to_string(),
             format: AppConfigFormat::Toml,
             hot_reload: true,
+            reload_note: None,
         },
         AppConfigDocument {
             id: DOC_ADAPTER_CONFIG.to_string(),
@@ -55,36 +46,12 @@ pub fn maibot_config_documents() -> Vec<AppConfigDocument> {
             rel_path: ADAPTER_CONFIG.to_string(),
             format: AppConfigFormat::Toml,
             hot_reload: true,
+            reload_note: Some(
+                "适配器配置由插件运行时重载；连接设置的生效结果请查看实例日志。".into(),
+            ),
         },
     ]
 }
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
-pub struct MaiBotInstanceConfig {
-    /// `config/bot_config.toml` 全部字段；`webui.port` 就是实例端口
-    pub bot: Box<MaiBotBotConfigFile>,
-    /// `config/model_config.toml` 全部字段
-    pub models: Box<MaiBotModelConfigFile>,
-    /// `data/webui.json` 的 access_token；只读
-    pub webui_token: String,
-    /// 适配器插件目录不在时为 None（装坏了或被删了）
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub adapter: Option<MaiBotAdapterConfig>,
-}
-
-impl MaiBotInstanceConfig {
-    pub fn webui_port(&self) -> u16 {
-        u16::try_from(self.bot.webui.port).unwrap_or(0)
-    }
-
-    pub fn legacy_ws_port(&self) -> u16 {
-        u16::try_from(self.bot.maim_message.ws_server_port).unwrap_or(0)
-    }
-}
-
-// ---- 共用的 TOML 小工具（适配器那份也用）----
 
 pub(super) fn parse_table(text: Option<&str>) -> toml::Table {
     text.and_then(|t| toml::from_str::<toml::Table>(t).ok())
@@ -130,8 +97,6 @@ pub(super) fn set_value(doc: &mut DocumentMut, table: &str, key: &str, mut v: to
     t.insert(key, Item::Value(v));
 }
 
-// ---- 首装种子 / 对接要的几项 ----
-
 /// `(webui_port, legacy_ws_port)`；装包、对接这些不走类型化配置的地方用
 pub fn read_bot_config_ports(text: Option<&str>) -> (u16, u16) {
     let root = parse_table(text);
@@ -164,51 +129,6 @@ pub fn read_webui_token(json: Option<&str>) -> String {
                 .map(str::to_string)
         })
         .unwrap_or_default()
-}
-
-/// 在桌面端把模型配好了，WebUI 的首次配置向导就不必再走：同上游 `mark_setup_completed`
-/// 记下完成时间，其余键原样。已经标过、或者文件读不懂就不动（返回 None），免得把 token 写丢
-pub fn mark_setup_completed(json: &str, now: &str) -> Option<String> {
-    let mut v: serde_json::Value = serde_json::from_str(json).ok()?;
-    let obj = v.as_object_mut()?;
-    if obj
-        .get("first_setup_completed")
-        .and_then(serde_json::Value::as_bool)
-        == Some(true)
-    {
-        return None;
-    }
-    obj.insert("first_setup_completed".into(), true.into());
-    obj.insert("setup_completed_at".into(), now.into());
-    serde_json::to_string_pretty(&v)
-        .ok()
-        .map(|s| format!("{s}\n"))
-}
-
-/// 模型能不能用，和前端 `maibotModelSetupIssue` 同一套判定：有提供商，回复 / 规划 / 杂务都挑了模型，
-/// 这几个任务用到的提供商 Key 不是开箱那份占位
-pub fn models_ready(models: &MaiBotModelConfigFile) -> bool {
-    const PLACEHOLDER_KEY: &str = "your-api-key";
-    let t = &models.model_task_config;
-    let required = [&t.replyer, &t.planner, &t.utils];
-    if models.api_providers.is_empty() || required.iter().any(|task| task.model_list.is_empty()) {
-        return false;
-    }
-    let used: std::collections::HashSet<&str> = models
-        .models
-        .iter()
-        .filter(|m| {
-            required
-                .iter()
-                .any(|task| task.model_list.contains(&m.name))
-        })
-        .map(|m| m.api_provider.as_str())
-        .collect();
-    !models.api_providers.iter().any(|p| {
-        used.contains(p.name.as_str())
-            && p.auth_type != "none"
-            && p.api_key.trim() == PLACEHOLDER_KEY
-    })
 }
 
 /// 首装种子：文件不存在时只写 `[inner].version` 和两个口，其余首启由上游按默认补齐
@@ -247,61 +167,9 @@ pub fn write_bot_config_ports(
     Ok(doc.to_string())
 }
 
-/// 对接输入是适配器的连接字段，类型化配置不让改，所以永远算没变
-pub fn link_inputs_changed(_before: &MaiBotInstanceConfig, _after: &MaiBotInstanceConfig) -> bool {
-    false
-}
-
-/// 上游热加载管不到的字段：启动时绑的口和 host、只在启动时读一次的日志 / 插件运行时 / 控制台开关。
-/// 走 WebUI 接口写也一样要重启，所以 WebUI 口也算在内（不只靠编排层的端口变化判断）
-pub fn restart_inputs_changed(before: &MaiBotInstanceConfig, after: &MaiBotInstanceConfig) -> bool {
-    let (b, a) = (&before.bot, &after.bot);
-    b.webui.port != a.webui.port
-        || b.webui.enabled != a.webui.enabled
-        || b.webui.host != a.webui.host
-        || b.webui.allowed_ips != a.webui.allowed_ips
-        || b.webui.trusted_proxies != a.webui.trusted_proxies
-        || b.webui.trust_xff != a.webui.trust_xff
-        || b.maim_message != a.maim_message
-        || b.log != a.log
-        || b.plugin_runtime.enabled != a.plugin_runtime.enabled
-        || b.debug.enable_console_input != a.debug.enable_console_input
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn setup_is_marked_once_and_keeps_the_token() {
-        let seed = super::super::render_webui_json("Ncd_tok");
-        let marked = mark_setup_completed(&seed, "2026-09-26T15:00:00.000000").unwrap();
-        let v: serde_json::Value = serde_json::from_str(&marked).unwrap();
-        assert_eq!(v["first_setup_completed"], true);
-        assert_eq!(v["setup_completed_at"], "2026-09-26T15:00:00.000000");
-        assert_eq!(v["access_token"], "Ncd_tok");
-        assert_eq!(v["token_source"], "configured");
-        assert_eq!(
-            mark_setup_completed(&marked, "later"),
-            None,
-            "标过就不再改时间"
-        );
-        assert_eq!(
-            mark_setup_completed("not json", "x"),
-            None,
-            "读不懂不动，免得把 token 写丢"
-        );
-    }
-
-    #[test]
-    fn models_are_ready_once_the_placeholder_key_is_replaced() {
-        let mut models = super::super::schema::read_model_config_file(None).unwrap();
-        assert!(!models_ready(&models), "开箱那份是占位 Key");
-        models.api_providers[0].api_key = "sk-real".into();
-        assert!(models_ready(&models));
-        models.model_task_config.utils.model_list.clear();
-        assert!(!models_ready(&models), "杂务也是必需任务");
-    }
 
     #[test]
     fn missing_files_read_as_upstream_defaults() {
@@ -331,104 +199,5 @@ mod tests {
         assert!(after.contains("port = 24001 # 默认"), "{after}");
         assert!(after.contains("host = [\"127.0.0.1\"]"));
         assert_eq!(read_bot_config_ports(Some(&after)), (24001, 24002));
-    }
-
-    fn cfg() -> MaiBotInstanceConfig {
-        MaiBotInstanceConfig {
-            bot: Box::default(),
-            // 类的默认值里提供商和模型都是空的；首启写出来的那份（DeepSeek）才是用户看到的默认
-            models: Box::new(super::super::schema::read_model_config_file(None).unwrap()),
-            webui_token: String::new(),
-            adapter: Some(MaiBotAdapterConfig {
-                enabled: false,
-                napcat_host: "127.0.0.1".into(),
-                napcat_port: 3001,
-                has_token: false,
-                chat: MaiBotChatFilter::default(),
-            }),
-        }
-    }
-
-    #[test]
-    fn upstream_defaults_pass_validation() {
-        assert_eq!(validate(&cfg()), vec![], "上游默认配置本身要能过校验");
-    }
-
-    #[test]
-    fn validate_ports_lists_and_cross_field_rules() {
-        let mut c = cfg();
-        c.bot.maim_message.ws_server_port = c.bot.webui.port;
-        if let Some(a) = c.adapter.as_mut() {
-            a.chat.group_list = vec!["12a".into()];
-        }
-        c.bot.message_receive.ban_msgs_regex = vec!["(?<=a)b".into(), "(".into()];
-        c.models.models[0].api_provider = "不存在".into();
-        c.models.model_task_config.utils.model_list = vec!["没有这个".into()];
-        let paths: Vec<String> = validate(&c).into_iter().map(|i| i.path).collect();
-        assert!(
-            paths.contains(&"bot/maim_message/ws_server_port".to_string()),
-            "{paths:?}"
-        );
-        assert!(paths.contains(&"adapter/chat/group_list".to_string()));
-        assert!(paths.contains(&"bot/message_receive/ban_msgs_regex/1".to_string()));
-        assert!(
-            !paths.contains(&"bot/message_receive/ban_msgs_regex/0".to_string()),
-            "环视是合法的 Python 正则"
-        );
-        assert!(paths.contains(&"models/models/0/api_provider".to_string()));
-        assert!(paths.contains(&"models/model_task_config/utils/model_list/0".to_string()));
-    }
-
-    #[test]
-    fn web_search_uses_services_and_checks_active_credentials() {
-        let mut c = cfg();
-        let mut service = super::super::schema::MaiBotWebServiceConfig::default();
-        service.timeout = 0.0;
-        service.base_url = "https://user:pass@example.com/?key=x".into();
-        c.models.web.services.insert("search".into(), service);
-        c.models.model_task_config.web_search.model_list = vec!["search".into(), "missing".into()];
-        let paths: Vec<String> = validate(&c).into_iter().map(|issue| issue.path).collect();
-        assert!(paths.contains(&"models/web/services/search/timeout".to_string()));
-        assert!(paths.contains(&"models/web/services/search/base_url".to_string()));
-        assert!(paths.contains(&"models/web/services/search/api_key".to_string()));
-        assert!(paths.contains(&"models/model_task_config/web_search/model_list".to_string()));
-        assert!(paths.contains(&"models/model_task_config/web_search/model_list/1".to_string()));
-    }
-
-    #[test]
-    fn price_periods_check_format_and_cross_midnight_overlap() {
-        let mut c = cfg();
-        let period = |start: &str, end: &str| super::super::schema::MaiBotModelPricePeriod {
-            start_time: start.into(),
-            end_time: end.into(),
-            price_in: 1.0,
-            price_out: 2.0,
-            cache_price_in: 0.0,
-        };
-        c.models.models[0].price_periods = vec![period("23:00", "01:00"), period("00:30", "02:00")];
-        assert!(
-            validate(&c)
-                .iter()
-                .any(|issue| issue.message.contains("重叠"))
-        );
-        c.models.models[0].price_periods[1].start_time = "01:00".into();
-        assert!(validate(&c).is_empty());
-        c.models.models[0].price_periods[1].start_time = "25:00".into();
-        assert!(
-            validate(&c)
-                .iter()
-                .any(|issue| issue.path == "models/models/0/price_periods/1/start_time")
-        );
-    }
-
-    #[test]
-    fn restart_needed_only_for_startup_bound_fields() {
-        let before = cfg();
-        let mut after = before.clone();
-        after.bot.personality.personality = "换个人格".into();
-        after.models.api_providers[0].api_key = "sk".into();
-        assert!(!restart_inputs_changed(&before, &after), "人格、模型热生效");
-        after.bot.maim_message.ws_server_port += 1;
-        assert!(restart_inputs_changed(&before, &after));
     }
 }

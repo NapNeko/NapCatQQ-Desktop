@@ -4,7 +4,6 @@ mod component;
 pub mod config;
 mod integration;
 pub mod manifest;
-pub mod plugin;
 mod probe;
 
 use std::sync::Arc;
@@ -12,41 +11,23 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use ncd_component::{Component, LaunchArgs};
 use ncd_domain::{
-    AppConfigDocument, AppConfigText, AppFrameworkManifest, AppInstance, AppProjectProbe,
-    AppStoreResource, OneBotLinkPlan, TerminalSnippet,
+    AppConfigDocument, AppFrameworkManifest, AppInstance, AppProjectProbe, OneBotLinkPlan,
+    TerminalSnippet,
 };
 use ncd_host::{Host, HostCommand, HostPath};
 use ncd_traits::{AppFrameworkError, AppIntegration};
 
 pub use component::KarinComponent;
-pub use config::{KarinInstanceConfig, karin_config_documents};
+pub use config::karin_config_documents;
 pub use integration::KarinIntegration;
 pub use manifest::{KARIN_FRAMEWORK_ID, karin_manifest};
-pub use plugin::{
-    KarinPluginAppFile, KarinPluginAuthor, KarinPluginInstalled, KarinPluginKind,
-    KarinPluginMarketEntry, KarinPluginRepo, app_file_basename, apply_plugin_enabled,
-    confirm_plugin_on_disk, git_clone_url, parse_karin_plugins_list, write_app_file_bytes,
-};
 
 use crate::adapter::{
     AppComponentSpec, AppFrameworkAdapter, apply_with_backup_ex, restore_from_backup,
 };
 use crate::adopt::{self, write_project_sidecar};
-use crate::config_doc::{
-    AppInstanceConfig, AppInstanceConfigEnvelope, DocumentSnapshot, MISSING_REVISION,
-    combined_revision_of, read_document,
-};
 use crate::env_file::EnvFile;
-use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
 use manifest::{ENV_WS_SERVER_AUTH_KEY, KARIN_ADAPTER_JSON, KARIN_ENV_FILE, KARIN_STDOUT_LOG};
-
-fn envelope(config: KarinInstanceConfig, snaps: &[DocumentSnapshot]) -> AppInstanceConfigEnvelope {
-    AppInstanceConfigEnvelope {
-        config: AppInstanceConfig::Karin(config),
-        revision: combined_revision_of(snaps),
-        documents: snaps.iter().map(DocumentSnapshot::revision_entry).collect(),
-    }
-}
 
 pub struct KarinAdapter {
     integration: KarinIntegration,
@@ -143,6 +124,24 @@ impl KarinAdapter {
 
 #[async_trait]
 impl AppFrameworkAdapter for KarinAdapter {
+    async fn read_webui_endpoint(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+    ) -> Result<(u16, String), AppFrameworkError> {
+        let text = Self::read_text(host, &Self::env_path(instance)).await?;
+        let env = EnvFile::parse(text.as_deref().unwrap_or_default());
+        let port = env
+            .get("HTTP_PORT")
+            .and_then(|v| v.parse::<u16>().ok())
+            .filter(|p| *p > 0)
+            .unwrap_or(instance.port);
+        Ok((
+            port,
+            env.get("HTTP_AUTH_KEY").unwrap_or_default().to_string(),
+        ))
+    }
+
     fn manifest(&self) -> &AppFrameworkManifest {
         self.integration.manifest()
     }
@@ -298,338 +297,11 @@ impl AppFrameworkAdapter for KarinAdapter {
     fn config_documents(&self, _instance: &AppInstance) -> Vec<AppConfigDocument> {
         karin_config_documents()
     }
-
-    async fn read_config(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-    ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
-        let install_dir = HostPath::from_posix(&instance.install_dir);
-        let (config, snaps) = config::read_karin_config(host, &install_dir).await?;
-        Ok(envelope(config, &snaps))
-    }
-
-    async fn write_config(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        config: &AppInstanceConfig,
-    ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
-        let AppInstanceConfig::Karin(karin) = config else {
-            return Err(AppFrameworkError::Validation(
-                "写入的不是 Karin 配置".to_string(),
-            ));
-        };
-        let install_dir = HostPath::from_posix(&instance.install_dir);
-        let (on_disk, current) = config::read_karin_config(host, &install_dir).await?;
-        let mut karin = karin.clone();
-        karin.restore_extras(&on_disk);
-        let (config, snaps) = config::write_karin_config(
-            host,
-            &install_dir,
-            &karin,
-            &current,
-            write_project_sidecar(instance),
-        )
-        .await?;
-        Ok(envelope(config, &snaps))
-    }
-
-    async fn list_installed(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        resource: AppStoreResource,
-    ) -> Result<Vec<AppStoreInstalled>, AppFrameworkError> {
-        if resource != AppStoreResource::Plugin {
-            return Ok(Vec::new());
-        }
-        Ok(plugin::list_installed(host, instance)
-            .await?
-            .into_iter()
-            .map(AppStoreInstalled::from_karin)
-            .collect())
-    }
-
-    async fn install_store_item(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        entry: &AppStoreMarketEntry,
-        log: Option<&plugin::PluginLogSink>,
-    ) -> Result<(), AppFrameworkError> {
-        let karin = entry
-            .to_karin()
-            .ok_or_else(|| AppFrameworkError::Validation("Karin 不能安装 PyPI 条目".to_string()))?;
-        plugin::install_plugin(host, instance, &karin, log).await
-    }
-
-    async fn update_store_item(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        entry: &AppStoreMarketEntry,
-        log: Option<&plugin::PluginLogSink>,
-    ) -> Result<(), AppFrameworkError> {
-        let karin = entry
-            .to_karin()
-            .ok_or_else(|| AppFrameworkError::Validation("Karin 不能更新 PyPI 条目".to_string()))?;
-        plugin::update_plugin(host, instance, &karin, log).await
-    }
-
-    async fn uninstall_store_item(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        id: &str,
-        flavor: AppStoreFlavor,
-        _resource: AppStoreResource,
-        log: Option<&plugin::PluginLogSink>,
-    ) -> Result<(), AppFrameworkError> {
-        let kind = flavor
-            .to_karin()
-            .ok_or_else(|| AppFrameworkError::Validation("Karin 不能卸载 PyPI 条目".to_string()))?;
-        plugin::uninstall_plugin(host, instance, id, kind, log).await
-    }
-
-    async fn list_plugin_config_docs(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        plugin_name: &str,
-    ) -> Result<Vec<AppConfigDocument>, AppFrameworkError> {
-        plugin::list_plugin_config_docs(host, instance, plugin_name).await
-    }
-
-    fn find_document(
-        &self,
-        instance: &AppInstance,
-        doc_id: &str,
-    ) -> Result<AppConfigDocument, AppFrameworkError> {
-        if let Some(doc) = plugin::resolve_plugin_config_doc(doc_id) {
-            return Ok(doc);
-        }
-        self.config_documents(instance)
-            .into_iter()
-            .find(|d| d.id == doc_id)
-            .ok_or_else(|| AppFrameworkError::Validation(format!("未知的配置文档: {doc_id}")))
-    }
-
-    async fn read_config_text(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        doc_id: &str,
-    ) -> Result<AppConfigText, AppFrameworkError> {
-        let doc = self.find_document(instance, doc_id)?;
-        let root = HostPath::from_posix(&instance.install_dir);
-        let snap = read_document(host, &root, &doc).await?;
-        if let Some(text) = snap.text {
-            return Ok(AppConfigText {
-                doc_id: doc.id,
-                text,
-                revision: snap.revision,
-            });
-        }
-        if let Some((name, rel)) = plugin::parse_plugin_doc_id(doc_id) {
-            if let Some(text) =
-                plugin::read_plugin_package_default(host, instance, name, rel).await?
-            {
-                return Ok(AppConfigText {
-                    doc_id: doc.id,
-                    text,
-                    revision: MISSING_REVISION.to_string(),
-                });
-            }
-        }
-        Ok(AppConfigText {
-            doc_id: doc.id,
-            text: String::new(),
-            revision: MISSING_REVISION.to_string(),
-        })
-    }
-
-    fn store_enable_via_config(&self) -> bool {
-        true
-    }
-
-    fn apply_store_enabled(
-        &self,
-        config: &AppInstanceConfig,
-        name: &str,
-        _resource: AppStoreResource,
-        enabled: bool,
-    ) -> Result<Option<AppInstanceConfig>, AppFrameworkError> {
-        let AppInstanceConfig::Karin(mut cfg) = config.clone() else {
-            return Err(AppFrameworkError::Validation(
-                "写入的不是 Karin 配置".into(),
-            ));
-        };
-        apply_plugin_enabled(&mut cfg, name, enabled)?;
-        Ok(Some(AppInstanceConfig::Karin(cfg)))
-    }
-
-    async fn confirm_store_item(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        entry: &crate::store::AppStoreMarketEntry,
-    ) -> Result<(), AppFrameworkError> {
-        let Some(karin) = entry.to_karin() else {
-            return Ok(());
-        };
-        confirm_plugin_on_disk(host, instance, &karin).await
-    }
-
-    fn store_market_urls(&self, resource: AppStoreResource) -> Vec<String> {
-        match resource {
-            AppStoreResource::Plugin => vec![plugin::KARIN_PLUGINS_LIST_URL.to_string()],
-            AppStoreResource::Adapter => Vec::new(),
-        }
-    }
-
-    fn parse_store_market(
-        &self,
-        resource: AppStoreResource,
-        text: &str,
-    ) -> Result<Vec<crate::store::AppStoreMarketEntry>, AppFrameworkError> {
-        match resource {
-            AppStoreResource::Plugin => Ok(parse_karin_plugins_list(text)?
-                .into_iter()
-                .map(crate::store::AppStoreMarketEntry::from_karin)
-                .collect()),
-            AppStoreResource::Adapter => Ok(Vec::new()),
-        }
-    }
-
-    fn store_app_file_dest(&self, instance: &AppInstance, basename: &str) -> Option<HostPath> {
-        Some(
-            HostPath::from_posix(&instance.install_dir)
-                .join("plugins/karin-plugin-example")
-                .join(basename),
-        )
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config_backup::tests::TestHost;
-    use serde_json::json;
-
-    #[tokio::test]
-    async fn write_config_restores_disk_extras_for_modeled_only_submission() {
-        let host = TestHost::new("karin-config");
-        let install = HostPath::from_posix("/apps/karin");
-        host.put("/apps/karin/.env", b"HTTP_PORT=7777\n");
-        for (id, value) in [
-            ("config", json!({"master":["old"],"future":{"root":[1,2]},
-                "submitted":"old","user":{"future":1},"friend":{"future":2},
-                "group":{"future":3},"directs":{"future":4},
-                "guilds":{"future":5},"channels":{"future":6}})),
-            ("adapter", json!({"future":"adapter","console":{"future":"console"},
-                "onebot":{"future":"onebot","ws_server":{"future":"ws-server"},
-                "ws_client":[{"url":"ws://bot","future":"bot-ws"}],
-                "http_server":[{"url":"http://bot","self_id":"bot","future":"bot-http"}]}})),
-            ("groups", json!([{"key":"default","future":{"group":true}}])),
-            ("privates", json!([{"key":"default","future":{"private":true}}])),
-            ("render", json!({"future":"render","ws_server":{"future":"render-ws-server"},
-                "ws_client":[{"url":"ws://render","future":"render-ws"}],
-                "http_server":[{"url":"http://render","future":"render-http"}]})),
-            ("redis", json!({"future":{"redis":true}})),
-        ] {
-            host.put(
-                install.join(format!("@karinjs/config/{id}.json")).as_posix(),
-                serde_json::to_string(&value).unwrap().as_bytes(),
-            );
-        }
-        let instance: AppInstance = serde_json::from_value(json!({
-            "id":"karin","framework_id":"karin","display_name":"Karin",
-            "placement":"remote_native","host_id":"remote:example",
-            "install_dir":install.as_posix(),"port":7777,"state":"stopped","created_at_ms":1
-        }))
-        .unwrap();
-        let adapter = KarinAdapter::new();
-        let before = adapter.read_config(host.as_ref(), &instance).await.unwrap();
-        let before_value = serde_json::to_value(&before.config).unwrap();
-        // 模拟仅按已建模字段重新构造的调用方；不是断言当前 JS 表单会丢弃运行时键。
-        let submitted: KarinInstanceConfig = serde_json::from_value(json!({
-            "config":{"master":["new"],"friend":{"enable":false},"submitted":"new"},
-            "adapter":{"console":{"isLocal":false},"onebot":{
-                "ws_server":{"timeout":30},"ws_client":[{"url":"ws://bot","token":"new"}],
-                "http_server":[{"url":"http://bot","self_id":"bot","api_token":"new"}]}},
-            "groups":[{"key":"default","cd":7}],"privates":[{"key":"default","mode":2}],
-            "render":{"ws_server":{"enable":false},
-                "ws_client":[{"url":"ws://render","enable":true}],
-                "http_server":[{"url":"http://render","enable":true}]},
-            "redis":{"database":3}
-        }))
-        .unwrap();
-        let after = adapter
-            .write_config(host.as_ref(), &instance, &AppInstanceConfig::Karin(submitted))
-            .await
-            .unwrap();
-        let after_value = serde_json::to_value(&after.config).unwrap();
-        for path in [
-            "/data/config/future",
-            "/data/config/user/future",
-            "/data/config/friend/future",
-            "/data/config/group/future",
-            "/data/config/directs/future",
-            "/data/config/guilds/future",
-            "/data/config/channels/future",
-            "/data/adapter/future",
-            "/data/adapter/console/future",
-            "/data/adapter/onebot/future",
-            "/data/adapter/onebot/ws_server/future",
-            "/data/adapter/onebot/ws_client/0/future",
-            "/data/adapter/onebot/http_server/0/future",
-            "/data/groups/0/future",
-            "/data/privates/0/future",
-            "/data/render/future",
-            "/data/render/ws_server/future",
-            "/data/render/ws_client/0/future",
-            "/data/render/http_server/0/future",
-            "/data/redis/future",
-        ] {
-            assert!(before_value.pointer(path).is_some(), "{path}");
-            assert_eq!(
-                after_value.pointer(path),
-                before_value.pointer(path),
-                "{path}"
-            );
-        }
-        for (path, expected) in [
-            ("/config/master", json!(["new"])),
-            ("/config/friend/enable", json!(false)),
-            ("/config/submitted", json!("new")),
-            ("/adapter/console/isLocal", json!(false)),
-            ("/adapter/onebot/ws_server/timeout", json!(30)),
-            ("/adapter/onebot/ws_client/0/token", json!("new")),
-            ("/adapter/onebot/http_server/0/api_token", json!("new")),
-            ("/groups/0/cd", json!(7)),
-            ("/privates/0/mode", json!(2)),
-            ("/render/ws_server/enable", json!(false)),
-            ("/render/ws_client/0/enable", json!(true)),
-            ("/render/http_server/0/enable", json!(true)),
-            ("/redis/database", json!(3)),
-        ] {
-            assert_eq!(after_value["data"].pointer(path), Some(&expected), "{path}");
-        }
-        for doc in karin_config_documents()
-            .into_iter()
-            .filter(|doc| doc.id != config::DOC_ENV)
-        {
-            let bytes = host.read_file(&install.join(&doc.rel_path)).await.unwrap();
-            let on_disk: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-            assert_eq!(on_disk, after_value["data"][&doc.id], "{}", doc.id);
-        }
-        assert_ne!(after.revision, before.revision);
-        assert_eq!(
-            after,
-            adapter.read_config(host.as_ref(), &instance).await.unwrap()
-        );
-    }
 
     #[test]
     fn enable_ws_server_only_rewrites_when_disabled() {

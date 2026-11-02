@@ -12,8 +12,7 @@
 //!   只认请求头 `X-Self-ID` 和 `selfId` 对得上，不验 token
 
 use ncd_domain::{
-    AppFrameworkId, AppFrameworkManifest, AppPlacement, AppStoreResource, AppWebUiAuthKind,
-    OneBotLinkMode,
+    AppFrameworkId, AppFrameworkManifest, AppPlacement, AppWebUiAuthKind, OneBotLinkMode,
 };
 
 pub const KOISHI_FRAMEWORK_ID: &str = "koishi";
@@ -89,7 +88,6 @@ pub fn koishi_manifest() -> AppFrameworkManifest {
         link_modes: vec![OneBotLinkMode::ReverseWs],
         component_id: KOISHI_COMPONENT_ID.to_string(),
         runtime_component_ids: vec!["nodejs".to_string()],
-        store_resources: vec![AppStoreResource::Plugin],
         has_install_renderer: false,
         webui_auth: AppWebUiAuthKind::None,
         terms: Vec::new(),

@@ -194,21 +194,4 @@ mod tests {
             }
         }
     }
-
-    #[test]
-    fn manifest_store_resources_have_market_urls() {
-        let reg = AppFrameworkRegistry::with_builtin();
-        for m in reg.manifests() {
-            let adapter = reg.get(&m.id).expect("registered");
-            for resource in &m.store_resources {
-                assert!(
-                    !adapter.store_market_urls(*resource).is_empty()
-                        || !adapter.store_market_parts(*resource).is_empty(),
-                    "{} 声明了 {:?} 商店但没有目录 URL",
-                    m.id.as_str(),
-                    resource
-                );
-            }
-        }
-    }
 }

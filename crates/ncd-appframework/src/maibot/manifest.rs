@@ -11,8 +11,8 @@
 //!   `config.toml` 的 `[plugin].enabled` 默认 false，连接在 `[napcat_server]` host / port / token
 
 use ncd_domain::{
-    AppFrameworkId, AppFrameworkManifest, AppPlacement, AppStoreResource, AppTermsDoc,
-    AppWebUiAuthKind, OneBotLinkMode,
+    AppFrameworkId, AppFrameworkManifest, AppPlacement, AppTermsDoc, AppWebUiAuthKind,
+    OneBotLinkMode,
 };
 
 pub const MAIBOT_FRAMEWORK_ID: &str = "maibot";
@@ -91,7 +91,6 @@ pub fn maibot_manifest() -> AppFrameworkManifest {
         link_modes: vec![OneBotLinkMode::ForwardWs],
         component_id: MAIBOT_COMPONENT_ID.to_string(),
         runtime_component_ids: vec!["uv".to_string()],
-        store_resources: vec![AppStoreResource::Plugin],
         has_install_renderer: false,
         webui_auth: AppWebUiAuthKind::Key,
         terms: vec![
@@ -122,11 +121,6 @@ mod tests {
         assert_eq!(back.id.as_str(), "maibot");
         assert_eq!(back.link_modes, vec![OneBotLinkMode::ForwardWs]);
         assert_eq!(back.webui_auth, AppWebUiAuthKind::Key);
-        assert_eq!(
-            back.store_resources,
-            vec![AppStoreResource::Plugin],
-            "只代管插件，适配器是插件的一种"
-        );
         let ids: Vec<&str> = back.terms.iter().map(|t| t.id.as_str()).collect();
         assert_eq!(ids, vec!["eula", "privacy"]);
     }

@@ -11,9 +11,7 @@
 //! - Redis：`redis.yaml` 地址连不上且 host 是 127.0.0.1 时 `spawn(path, ["--port", port])`，cwd 是实例目录
 //! - 依赖里 engines 最高的是 puppeteer `>=22.12.0`；README 写的 23.11 只为 `process.execve` 原地重启
 
-use ncd_domain::{
-    AppFrameworkId, AppFrameworkManifest, AppPlacement, AppStoreResource, OneBotLinkMode,
-};
+use ncd_domain::{AppFrameworkId, AppFrameworkManifest, AppPlacement, OneBotLinkMode};
 
 pub const YUNZAI_FRAMEWORK_ID: &str = "yunzai";
 /// 与 `ComponentId::Yunzai` 的 serde 字面量一致
@@ -67,7 +65,6 @@ pub fn yunzai_manifest() -> AppFrameworkManifest {
         link_modes: vec![OneBotLinkMode::ReverseWs],
         component_id: YUNZAI_COMPONENT_ID.to_string(),
         runtime_component_ids: vec!["git".to_string(), "nodejs".to_string(), "redis".to_string()],
-        store_resources: vec![AppStoreResource::Plugin],
         has_install_renderer: true,
         webui_auth: ncd_domain::AppWebUiAuthKind::None,
         terms: Vec::new(),
@@ -89,7 +86,6 @@ mod tests {
         assert_eq!(back.default_port, 2536);
         assert!(!back.has_webui);
         assert_eq!(back.link_modes, vec![OneBotLinkMode::ReverseWs]);
-        assert_eq!(back.store_resources, vec![AppStoreResource::Plugin]);
         assert!(back.has_install_renderer);
         assert!(back.terms.is_empty());
         assert!(

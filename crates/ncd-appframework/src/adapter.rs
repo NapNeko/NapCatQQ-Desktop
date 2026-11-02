@@ -8,24 +8,11 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use ncd_component::{Component, LaunchArgs};
 use ncd_domain::{
-    AppConfigDocument, AppConfigText, AppFrameworkManifest, AppInstance, AppPendingTerms,
-    AppPluginConfigSchema, AppProjectProbe, AppStoreResource, OneBotLinkPlan,
+    AppConfigDocument, AppFrameworkManifest, AppInstance, AppPendingTerms, AppProjectProbe,
+    OneBotLinkPlan,
 };
 use ncd_host::{Host, HostCommand, HostPath};
 use ncd_traits::{AppFrameworkError, AppIntegration};
-
-use crate::astrbot::api::AstrBotRuntimeApi;
-use crate::config_doc::{
-    AppInstanceConfig, AppInstanceConfigEnvelope, read_document, write_document_text,
-};
-use crate::koishi::runtime::KoishiRuntimeApi;
-use crate::maibot::api::MaiBotRuntimeApi;
-use crate::store::{
-    AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry, StoreMarketPart, StoreMarketText,
-};
-
-/// 装更卸命令行输出；编排层转成任务 `ProgressKind::Log`。
-pub type PluginLogSink = Arc<dyn Fn(String) + Send + Sync>;
 
 /// 为某个应用实例构造 Component 所需的输入（编排层填）
 #[derive(Debug, Clone)]
@@ -72,64 +59,6 @@ pub struct WebUiAccountProbe {
     pub stored_is_hash: bool,
 }
 
-/// 面板转发结果的分类。
-///
-/// 分态而不是干脆 Err：前端要能区分「没填面板密码」和「面板没起来」——
-/// 前者引导去填凭据，后者引导去检查实例状态，混成一个错误就只能给一句无用的话。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, ts_rs::TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
-pub enum AppPanelOutcomeKind {
-    Ok,
-    /// 凭据缺失或不正确：让用户去填面板密码
-    Unauthorized,
-    /// 面板打不通（没在跑 / 口不对 / 端口被占）
-    Unreachable,
-    /// 面板没有这个接口（404）：实例的 NeoBot 版本低于该接口要求的版本。
-    /// 与 Unauthorized 分开，是因为解决方式不同——填密码没用，得升级 NeoBot。
-    NotFound,
-    /// 其它失败（含状态码与非法路径）
-    Failed,
-}
-
-/// 一次面板转发的完整结果
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, ts_rs::TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
-pub struct AppPanelResult {
-    pub kind: AppPanelOutcomeKind,
-    /// 成功时的面板回包。面板是**扁平信封**：{"ok":true, ...键平铺...}，这里原样透出。
-    /// ts-rs 不认 serde_json::Value，所以对前端声明成 unknown，由各页自己收窄。
-    #[ts(optional, type = "unknown")]
-    pub data: Option<serde_json::Value>,
-    /// 失败时给人看的一句话
-    #[ts(optional)]
-    pub message: Option<String>,
-    /// 保留冲突和校验状态，编辑器才能让用户处理当前版本。
-    #[serde(default)]
-    #[ts(optional)]
-    pub status: Option<u16>,
-}
-
-impl AppPanelResult {
-    pub fn ok(data: serde_json::Value) -> Self {
-        Self {
-            kind: AppPanelOutcomeKind::Ok,
-            data: Some(data),
-            message: None,
-            status: None,
-        }
-    }
-
-    pub fn err(kind: AppPanelOutcomeKind, message: impl Into<String>) -> Self {
-        Self {
-            kind,
-            data: None,
-            message: Some(message.into()),
-            status: None,
-        }
-    }
-}
-
 #[async_trait]
 pub trait AppFrameworkAdapter: Send + Sync {
     fn manifest(&self) -> &AppFrameworkManifest;
@@ -147,25 +76,6 @@ pub trait AppFrameworkAdapter: Send + Sync {
     async fn available_versions(
         &self,
     ) -> Result<Option<crate::neobot::versions::PackageVersions>, AppFrameworkError> {
-        Ok(None)
-    }
-
-    /// 代桌面端调一次该框架**自带控制台**的接口。
-    ///
-    /// 返回 Ok(None) = 这个框架不提供这种转发（默认），UI 就别显示相关页签；
-    /// 返回 Ok(Some(_)) = 框架支持，里面是调用结果（含凭据不对 / 面板打不通这些分态）。
-    ///
-    /// 为什么由适配器实现而不是桌面端自己连：面板口要从**框架自己的配置**里读
-    /// （NeoBot 的面板口与 OneBot 口是两个口），只有适配器知道该读哪。
-    async fn panel_request(
-        &self,
-        _host: &dyn Host,
-        _instance: &AppInstance,
-        _password: Option<&str>,
-        _method: &str,
-        _path: &str,
-        _body: Option<serde_json::Value>,
-    ) -> Result<Option<AppPanelResult>, AppFrameworkError> {
         Ok(None)
     }
 
@@ -197,6 +107,15 @@ pub trait AppFrameworkAdapter: Send + Sync {
     /// `read_config` 失败时打开 WebUI 用的回落口。默认等于 `instance.port`。
     fn webui_fallback_port(&self, instance: &AppInstance) -> u16 {
         instance.port
+    }
+
+    /// 只读取打开 WebUI 必需的端口和登录密钥，不解析框架业务配置。
+    async fn read_webui_endpoint(
+        &self,
+        _host: &dyn Host,
+        instance: &AppInstance,
+    ) -> Result<(u16, String), AppFrameworkError> {
+        Ok((self.webui_fallback_port(instance), String::new()))
     }
 
     /// 用户名密码类 WebUI：读落盘账号，顺带核对桌面端记住的密码。None = 该框架不是账号密码登录。
@@ -356,7 +275,7 @@ pub trait AppFrameworkAdapter: Send + Sync {
     /// 实例运行日志文件（远端 tail 用）；None 表示只有进程 stdout
     fn log_file(&self, instance: &AppInstance) -> Option<HostPath>;
 
-    /// 该实例可在「原始文件」Tab 编辑的配置文档；空表示没有可编辑配置
+    /// 可编辑、随实例迁移和备份的配置文档。
     fn config_documents(&self, _instance: &AppInstance) -> Vec<AppConfigDocument> {
         Vec::new()
     }
@@ -370,294 +289,22 @@ pub trait AppFrameworkAdapter: Send + Sync {
         Ok(self.config_documents(instance))
     }
 
-    /// 类型化配置读取；没有类型化模型的框架保持默认（`ConfigUnsupported`）
-    async fn read_config(
+    /// 框架会回写原文时，拒绝与运行中进程争写。
+    fn validate_config_file_write(
         &self,
-        _host: &dyn Host,
-        instance: &AppInstance,
-    ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
-        Err(AppFrameworkError::ConfigUnsupported(
-            instance.framework_id.as_str().to_string(),
-        ))
+        _instance: &AppInstance,
+        _doc_id: &str,
+    ) -> Result<(), AppFrameworkError> {
+        Ok(())
     }
 
-    /// 类型化配置写入（校验 → 备份写 → 回读）。返回写后信封，供编排层比对版本号
-    async fn write_config(
-        &self,
-        _host: &dyn Host,
-        instance: &AppInstance,
-        _config: &AppInstanceConfig,
-    ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
-        Err(AppFrameworkError::ConfigUnsupported(
-            instance.framework_id.as_str().to_string(),
-        ))
-    }
-
-    fn supports_live_config(&self) -> bool {
-        false
-    }
-
-    /// 运行中两次写配置至少隔多久。应用靠文件监听热加载、又会丢掉太密的变更时给（MaiBot 距上次
-    /// 热加载不足 1s 的改动直接跳过、也不补）；None = 不限
-    fn config_write_min_interval(&self) -> Option<std::time::Duration> {
-        None
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    async fn write_live_config(
-        &self,
-        _host: &dyn Host,
-        instance: &AppInstance,
-        _loopback_port: u16,
-        _username: &str,
-        _password: &str,
-        _desktop_secret: Option<&str>,
-        _config: &AppInstanceConfig,
-        _conf_id: &str,
-    ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
-        Err(AppFrameworkError::ConfigUnsupported(
-            instance.framework_id.as_str().to_string(),
-        ))
-    }
-
-    /// AstrBot 的人格 / 知识库 / 会话规则等运行期资源。None = 该框架没有这套 API。
-    /// 这些类型是 AstrBot 专有的，不进通用 trait 的方法签名。
-    fn astrbot_runtime(&self) -> Option<&dyn AstrBotRuntimeApi> {
-        None
-    }
-
-    /// MaiBot 的运行状态 / 用量 / 会话 / 提供商与 MCP 探测。同上，类型是 MaiBot 专有的
-    fn maibot_runtime(&self) -> Option<&dyn MaiBotRuntimeApi> {
-        None
-    }
-
-    /// Koishi 的 Bot 在线 / 插件 schema / 重启 worker。同上，类型是 Koishi 专有的
-    fn koishi_runtime(&self) -> Option<&dyn KoishiRuntimeApi> {
-        None
-    }
-
-    /// 跑着的实例要经 WebUI 口（控制台）改应用端配置的框架：编排层在对接、商店装卸之前
+    /// 跑着的实例要经 WebUI 口（控制台）写对接配置的框架：编排层在对接之前
     /// 先把桌面端这边的回环口（远端是隧道口）告诉适配器
     fn wants_live_port(&self) -> bool {
         false
     }
 
     fn note_live_port(&self, _instance_id: &str, _port: u16) {}
-
-    /// 读一份文档原文（缺文件返回空文本 + `"missing"` 版本号）
-    async fn read_config_text(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        doc_id: &str,
-    ) -> Result<AppConfigText, AppFrameworkError> {
-        let doc = self.resolve_document(host, instance, doc_id).await?;
-        let snap = read_document(host, &HostPath::from_posix(&instance.install_dir), &doc).await?;
-        Ok(AppConfigText {
-            doc_id: doc.id,
-            text: snap.text.unwrap_or_default(),
-            revision: snap.revision,
-        })
-    }
-
-    /// 写一份文档原文（格式预检 + 版本号比对 + 备份写）
-    async fn write_config_text(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        doc_id: &str,
-        text: &str,
-        base_revision: Option<&str>,
-    ) -> Result<AppConfigText, AppFrameworkError> {
-        let doc = self.resolve_document(host, instance, doc_id).await?;
-        write_document_text(
-            host,
-            &HostPath::from_posix(&instance.install_dir),
-            &doc,
-            text,
-            base_revision,
-            crate::adopt::write_project_sidecar(instance),
-        )
-        .await
-    }
-
-    fn find_document(
-        &self,
-        instance: &AppInstance,
-        doc_id: &str,
-    ) -> Result<AppConfigDocument, AppFrameworkError> {
-        self.config_documents(instance)
-            .into_iter()
-            .find(|d| d.id == doc_id)
-            .ok_or_else(|| AppFrameworkError::Validation(format!("未知的配置文档: {doc_id}")))
-    }
-
-    async fn resolve_document(
-        &self,
-        host: &dyn Host,
-        instance: &AppInstance,
-        doc_id: &str,
-    ) -> Result<AppConfigDocument, AppFrameworkError> {
-        if let Some(doc) = self
-            .list_config_documents(host, instance)
-            .await?
-            .into_iter()
-            .find(|d| d.id == doc_id)
-        {
-            return Ok(doc);
-        }
-        self.find_document(instance, doc_id)
-    }
-
-    async fn list_installed(
-        &self,
-        _host: &dyn Host,
-        instance: &AppInstance,
-        _resource: AppStoreResource,
-    ) -> Result<Vec<AppStoreInstalled>, AppFrameworkError> {
-        Err(AppFrameworkError::PluginUnsupported(
-            instance.framework_id.as_str().to_string(),
-        ))
-    }
-
-    async fn install_store_item(
-        &self,
-        _host: &dyn Host,
-        instance: &AppInstance,
-        _entry: &AppStoreMarketEntry,
-        _log: Option<&PluginLogSink>,
-    ) -> Result<(), AppFrameworkError> {
-        Err(AppFrameworkError::PluginUnsupported(
-            instance.framework_id.as_str().to_string(),
-        ))
-    }
-
-    async fn update_store_item(
-        &self,
-        _host: &dyn Host,
-        instance: &AppInstance,
-        _entry: &AppStoreMarketEntry,
-        _log: Option<&PluginLogSink>,
-    ) -> Result<(), AppFrameworkError> {
-        Err(AppFrameworkError::PluginUnsupported(
-            instance.framework_id.as_str().to_string(),
-        ))
-    }
-
-    async fn uninstall_store_item(
-        &self,
-        _host: &dyn Host,
-        instance: &AppInstance,
-        _id: &str,
-        _flavor: AppStoreFlavor,
-        _resource: AppStoreResource,
-        _log: Option<&PluginLogSink>,
-    ) -> Result<(), AppFrameworkError> {
-        Err(AppFrameworkError::PluginUnsupported(
-            instance.framework_id.as_str().to_string(),
-        ))
-    }
-
-    async fn set_store_enabled(
-        &self,
-        _host: &dyn Host,
-        instance: &AppInstance,
-        _id: &str,
-        _resource: AppStoreResource,
-        _enabled: bool,
-        _overwrite: bool,
-    ) -> Result<(), AppFrameworkError> {
-        Err(AppFrameworkError::PluginUnsupported(
-            instance.framework_id.as_str().to_string(),
-        ))
-    }
-
-    async fn list_plugin_config_docs(
-        &self,
-        _host: &dyn Host,
-        instance: &AppInstance,
-        _plugin_name: &str,
-    ) -> Result<Vec<AppConfigDocument>, AppFrameworkError> {
-        Err(AppFrameworkError::PluginUnsupported(
-            instance.framework_id.as_str().to_string(),
-        ))
-    }
-
-    /// 插件配置表单；None = 该插件只能改原文（`list_plugin_config_docs` 给的文档）
-    async fn plugin_config_schema(
-        &self,
-        _host: &dyn Host,
-        _instance: &AppInstance,
-        _plugin_name: &str,
-    ) -> Result<Option<AppPluginConfigSchema>, AppFrameworkError> {
-        Ok(None)
-    }
-
-    /// 商店启停是否改类型化配置（再走 `write_config` 同步对接）。
-    /// false：自己写盘（`set_store_enabled`）。
-    fn store_enable_via_config(&self) -> bool {
-        false
-    }
-
-    /// 在类型化配置上改商店启停；`None` 表示走 `set_store_enabled`。
-    fn apply_store_enabled(
-        &self,
-        _config: &AppInstanceConfig,
-        _name: &str,
-        _resource: AppStoreResource,
-        _enabled: bool,
-    ) -> Result<Option<AppInstanceConfig>, AppFrameworkError> {
-        Ok(None)
-    }
-
-    /// 装/更之后核对落盘（Karin 插件目录）；默认不做事。
-    async fn confirm_store_item(
-        &self,
-        _host: &dyn Host,
-        _instance: &AppInstance,
-        _entry: &AppStoreMarketEntry,
-    ) -> Result<(), AppFrameworkError> {
-        Ok(())
-    }
-
-    fn store_market_urls(&self, _resource: AppStoreResource) -> Vec<String> {
-        Vec::new()
-    }
-
-    fn store_market_cache_key(&self, _resource: AppStoreResource) -> Option<&'static str> {
-        None
-    }
-
-    fn parse_store_market(
-        &self,
-        _resource: AppStoreResource,
-        _text: &str,
-    ) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
-        Err(AppFrameworkError::PluginUnsupported(
-            self.manifest().id.as_str().to_string(),
-        ))
-    }
-
-    /// 目录分几份文件发布时每份的镜像；非空时编排层不看 `store_market_urls`，按份拉
-    /// （单份拉不到跳过，全都拉不到才报错），再交给 `parse_store_market_parts`
-    fn store_market_parts(&self, _resource: AppStoreResource) -> Vec<StoreMarketPart> {
-        Vec::new()
-    }
-
-    fn parse_store_market_parts(
-        &self,
-        _resource: AppStoreResource,
-        _parts: &[StoreMarketText],
-    ) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
-        Err(AppFrameworkError::PluginUnsupported(
-            self.manifest().id.as_str().to_string(),
-        ))
-    }
-
-    /// App 口味文件落盘路径；None 表示此框架不收 app 文件。
-    fn store_app_file_dest(&self, _instance: &AppInstance, _basename: &str) -> Option<HostPath> {
-        None
-    }
 }
 
 /// 「备份 → 写 → 失败还原」骨架：`write` 返回 Err 时把 `files` 全部还原到备份内容。
@@ -695,11 +342,6 @@ where
                 .read_file(file)
                 .await
                 .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
-            if write_sidecar {
-                host.write_file(&backup_path(file), &bytes)
-                    .await
-                    .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
-            }
             Some(bytes.to_vec())
         } else {
             None
@@ -707,14 +349,38 @@ where
         originals.push((file.clone(), content));
     }
 
+    apply_with_backup_snapshots(host, &originals, write_sidecar, write).await
+}
+
+/// 复用校验过的快照，让备份与回滚保留同一份原文。
+pub(crate) async fn apply_with_backup_snapshots<F, Fut>(
+    host: &dyn Host,
+    originals: &[(HostPath, Option<Vec<u8>>)],
+    write_sidecar: bool,
+    write: F,
+) -> Result<(), AppFrameworkError>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<(), AppFrameworkError>>,
+{
+    if write_sidecar {
+        for (file, content) in originals {
+            if let Some(bytes) = content {
+                host.write_file(&backup_path(file), bytes)
+                    .await
+                    .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
+            }
+        }
+    }
+
     match write().await {
         Ok(()) => Ok(()),
         Err(err) => {
             for (file, original) in originals {
                 let restore = match original {
-                    Some(bytes) => host.write_file(&file, &bytes).await,
-                    None => match host.exists(&file).await {
-                        Ok(true) => host.remove_file(&file).await,
+                    Some(bytes) => host.write_file(file, bytes).await,
+                    None => match host.exists(file).await {
+                        Ok(true) => host.remove_file(file).await,
                         _ => Ok(()),
                     },
                 };
@@ -758,178 +424,4 @@ pub async fn restore_from_backup(
             .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use ncd_domain::AppStoreResource;
-
-    use crate::AppFrameworkAdapter;
-    use crate::config_doc::AppInstanceConfig;
-    use crate::karin::KarinAdapter;
-    use crate::karin::config::KarinInstanceConfig;
-    use crate::nonebot2::NoneBot2Adapter;
-
-    #[test]
-    fn karin_store_enable_goes_through_typed_config() {
-        let adapter = KarinAdapter::new();
-        assert!(adapter.store_enable_via_config());
-        let cfg = AppInstanceConfig::Karin(KarinInstanceConfig::upstream_default());
-        let next = adapter
-            .apply_store_enabled(
-                &cfg,
-                "@karinjs/plugin-basic",
-                AppStoreResource::Plugin,
-                false,
-            )
-            .unwrap()
-            .expect("Karin 启停应返回改过的配置");
-        let AppInstanceConfig::Karin(k) = next else {
-            panic!("expected Karin config");
-        };
-        assert!(
-            k.groups
-                .iter()
-                .any(|r| r.key == "default" && r.disable.contains(&"@karinjs/plugin-basic".into()))
-        );
-    }
-
-    #[test]
-    fn nonebot2_store_enable_does_not_mutate_typed_config() {
-        let adapter = NoneBot2Adapter::new();
-        assert!(!adapter.store_enable_via_config());
-        let cfg = AppInstanceConfig::NoneBot2(crate::nonebot2::NoneBot2InstanceConfig {
-            env_prod: crate::nonebot2::config::NoneBot2EnvProd::default(),
-        });
-        assert!(
-            adapter
-                .apply_store_enabled(&cfg, "nonebot_plugin_foo", AppStoreResource::Plugin, false)
-                .unwrap()
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn karin_store_market_urls_only_for_plugins() {
-        let adapter = KarinAdapter::new();
-        assert_eq!(
-            adapter.store_market_urls(AppStoreResource::Plugin),
-            vec![crate::karin::plugin::KARIN_PLUGINS_LIST_URL.to_string()]
-        );
-        assert!(
-            adapter
-                .store_market_urls(AppStoreResource::Adapter)
-                .is_empty()
-        );
-        assert!(
-            adapter
-                .store_market_cache_key(AppStoreResource::Plugin)
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn nonebot2_store_market_urls_follow_nb_cli() {
-        let adapter = NoneBot2Adapter::new();
-        let plugins = adapter.store_market_urls(AppStoreResource::Plugin);
-        let adapters = adapter.store_market_urls(AppStoreResource::Adapter);
-        assert_eq!(plugins[0], "https://registry.nonebot.dev/plugins.json");
-        assert_eq!(adapters[0], "https://registry.nonebot.dev/adapters.json");
-        assert!(
-            plugins
-                .iter()
-                .any(|u| u.contains("jsdelivr.net/gh/nonebot/registry@results"))
-        );
-        assert_eq!(
-            adapter.store_market_cache_key(AppStoreResource::Plugin),
-            Some("plugins")
-        );
-        assert_eq!(
-            adapter.store_market_cache_key(AppStoreResource::Adapter),
-            Some("adapters")
-        );
-    }
-
-    #[test]
-    fn astrbot_store_is_plugins_only() {
-        let adapter = crate::astrbot::AstrBotAdapter::new();
-        assert!(
-            !adapter
-                .store_market_urls(AppStoreResource::Plugin)
-                .is_empty()
-        );
-        assert!(
-            adapter
-                .store_market_urls(AppStoreResource::Adapter)
-                .is_empty()
-        );
-        assert_eq!(
-            adapter.store_market_cache_key(AppStoreResource::Plugin),
-            Some("astrbot-plugins")
-        );
-        assert!(matches!(
-            adapter.parse_store_market(AppStoreResource::Adapter, "{}"),
-            Err(ncd_traits::AppFrameworkError::PluginUnsupported(_))
-        ));
-    }
-
-    #[test]
-    fn store_app_file_dest_is_per_adapter() {
-        use ncd_domain::{
-            AppFrameworkId, AppInstance, AppInstanceId, AppInstanceState, AppPlacement,
-        };
-
-        let instance = AppInstance {
-            id: AppInstanceId::new("k1"),
-            framework_id: AppFrameworkId::new("karin"),
-            display_name: "K".into(),
-            placement: AppPlacement::LocalNative,
-            host_id: "local".into(),
-            install_dir: "/apps/karin/k1".into(),
-            port: 7777,
-            state: AppInstanceState::Installed,
-            link: None,
-            installed_version: None,
-            last_error: None,
-            created_at_ms: 1,
-            install_renderer: true,
-            origin: ncd_domain::AppInstanceOrigin::Created,
-            auto_start: true,
-        };
-        let dest = KarinAdapter::new()
-            .store_app_file_dest(&instance, "index.js")
-            .expect("Karin 收 app 文件");
-        assert_eq!(
-            dest.as_posix(),
-            "/apps/karin/k1/plugins/karin-plugin-example/index.js"
-        );
-        assert!(
-            NoneBot2Adapter::new()
-                .store_app_file_dest(&instance, "index.js")
-                .is_none(),
-            "NoneBot2 没有 Karin 式 app 文件落点"
-        );
-    }
-
-    #[test]
-    fn parse_store_market_dispatches_by_adapter() {
-        let karin = KarinAdapter::new();
-        let list = karin
-            .parse_store_market(
-                AppStoreResource::Plugin,
-                r#"{"plugins":[{"name":"x","type":"npm","description":"d","time":"2025-01-01 00:00:00","home":"h","author":[],"repo":[]}]}"#,
-            )
-            .unwrap();
-        assert_eq!(list[0].id, "x");
-
-        let nb = NoneBot2Adapter::new();
-        let adapters = nb
-            .parse_store_market(
-                AppStoreResource::Adapter,
-                r#"[{"module_name":"nonebot.adapters.console","project_link":"nonebot-adapter-console","name":"Console"}]"#,
-            )
-            .unwrap();
-        assert_eq!(adapters[0].id, "nonebot.adapters.console");
-        assert_eq!(adapters[0].resource, AppStoreResource::Adapter);
-    }
 }

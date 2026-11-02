@@ -73,15 +73,6 @@ pub fn read_aiocqhttp_token(row: &Value) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-pub fn read_aiocqhttp_host(row: &Value) -> String {
-    row.get(KEY_WS_REVERSE_HOST)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .unwrap_or("0.0.0.0")
-        .to_string()
-}
-
 pub fn dashboard_port(root: &Value) -> u16 {
     root.get("dashboard")
         .and_then(|d| d.get("port"))
@@ -240,16 +231,6 @@ pub fn upsert_claimed_row(
             Ok(rows.len() - 1)
         }
     }
-}
-
-pub fn other_platform_types(rows: &[Value], claimed: Option<usize>) -> Vec<String> {
-    rows.iter()
-        .enumerate()
-        .filter(|(i, _)| Some(*i) != claimed)
-        .filter_map(|(_, row)| row.get("type").and_then(Value::as_str))
-        .filter(|t| *t != PLATFORM_TYPE_AIOCQHTTP)
-        .map(ToOwned::to_owned)
-        .collect()
 }
 
 pub fn validate_proposed_port(

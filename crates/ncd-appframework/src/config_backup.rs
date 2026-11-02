@@ -207,8 +207,7 @@ impl FrameworkConfigBackup {
                 return Err("框架配置超出大小限制（单文件 2 MiB、单实例 8 MiB）".into());
             }
             if let Some(format) = format {
-                // AstrBot 也会写 UTF-8 BOM，校验时忽略，恢复时仍原样保留。
-                validate_text(format, file.text.trim_start_matches('\u{feff}'))
+                validate_text(format, &file.text)
                     .map_err(|e| format!("{}: {e}", file.relative_path))?;
             }
         }
