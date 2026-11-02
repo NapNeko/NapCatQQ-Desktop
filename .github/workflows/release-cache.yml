@@ -31,7 +31,9 @@ jobs:
     uses: ./.github/workflows/build-msi.yml
     with:
       warm_cache: true
+      git_ref: ${{ github.sha }}
   linux:
     uses: ./.github/workflows/build-linux.yml
     with:
       warm_cache: true
+      git_ref: ${{ github.sha }}

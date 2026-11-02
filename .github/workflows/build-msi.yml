@@ -110,7 +110,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           prefix-key: rust-msi-deps-v3
-          shared-key: build-msi-windows
+          # rust-cache 未计入虚拟 workspace 根清单，需显式跟踪 release profile。
+          shared-key: build-msi-windows-${{ hashFiles('Cargo.toml') }}
           workspaces: ". -> target"
           cache-workspace-crates: "false"
           cache-bin: "false"

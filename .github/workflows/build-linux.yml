@@ -75,7 +75,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           prefix-key: rust-linux-deps-v1
-          shared-key: linux-package-dependencies
+          # rust-cache 未计入虚拟 workspace 根清单，需显式跟踪 release profile。
+          shared-key: linux-package-dependencies-${{ hashFiles('Cargo.toml') }}
           cache-workspace-crates: "false"
           cache-bin: "false"
           cache-on-failure: "false"
