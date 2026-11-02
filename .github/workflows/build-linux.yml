@@ -4,6 +4,11 @@ name: Build Linux Packages
 on:
   workflow_call:
     inputs:
+      warm_cache:
+        description: "只在 main 预热依赖缓存，不打包或上传制品"
+        required: false
+        default: false
+        type: boolean
       git_ref:
         description: "构建所基于的 Git ref"
         required: false
@@ -25,7 +30,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: build-linux-${{ inputs.git_ref || github.ref }}
+  group: build-linux-${{ inputs.warm_cache && 'cache' || 'package' }}-${{ inputs.git_ref || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -48,7 +53,7 @@ jobs:
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -64,30 +69,40 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      # 不缓存 target：workspace 产物可能含有编译期代理密钥。
+      # 与 Windows 相同，只复用经过清理的第三方编译产物。
       - name: Cache Cargo dependencies
+        id: cache
         uses: Swatinem/rust-cache@v2
         with:
+          prefix-key: rust-linux-deps-v1
           shared-key: linux-package-dependencies
-          cache-targets: "false"
+          cache-workspace-crates: "false"
           cache-bin: "false"
+          cache-on-failure: "false"
+          save-if: ${{ inputs.warm_cache && github.ref == 'refs/heads/main' }}
+
+      - name: Verify dependency-only cache
+        run: node scripts/ci-release-cache.mjs check
 
       - name: Install frontend dependencies
+        if: ${{ !inputs.warm_cache || steps.cache.outputs.cache-hit != 'true' }}
         run: pnpm install --frozen-lockfile
 
       - name: Check version metadata
         run: pnpm run check:versions
 
       - name: Build Linux packages
+        if: ${{ !inputs.warm_cache || steps.cache.outputs.cache-hit != 'true' }}
         env:
           # AppImage 工具通过解包运行，托管 runner 无需挂载 FUSE。
           APPIMAGE_EXTRACT_AND_RUN: "1"
           NCD_PROXY_BASE_URL: ${{ vars.NCD_PROXY_BASE_URL || 'https://napcat-desktop.aqiaoyo.top' }}
           NCD_PROXY_SECRET: ${{ secrets.NCD_PROXY_SECRET }}
           NCD_PROXY_SHARED_SECRET: ${{ secrets.NCD_PROXY_SHARED_SECRET }}
-        run: pnpm run tauri:build:linux
+        run: pnpm run tauri:build ${{ inputs.warm_cache && '--no-bundle' || '--bundles deb,appimage' }} -- --locked
 
       - name: Verify AppImage desktop integration
+        if: ${{ !inputs.warm_cache }}
         shell: bash
         run: |
           set -euo pipefail
@@ -107,6 +122,7 @@ jobs:
           ! grep -Eq '^NoDisplay=true[[:space:]]*$' "${desktop[0]}"
 
       - name: Collect Linux packages
+        if: ${{ !inputs.warm_cache }}
         id: collect
         run: |
           version=$(node -p "require('./package.json').version")
@@ -116,9 +132,14 @@ jobs:
           echo "artifact_name=linux-x64-${version}" >> "$GITHUB_OUTPUT"
 
       - name: Upload Linux packages
+        if: ${{ !inputs.warm_cache }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.collect.outputs.artifact_name }}
           if-no-files-found: error
           retention-days: 7
+          compression-level: 0
           path: release-assets/*
+
+      - name: Remove workspace artifacts before caching
+        run: node scripts/ci-release-cache.mjs clean

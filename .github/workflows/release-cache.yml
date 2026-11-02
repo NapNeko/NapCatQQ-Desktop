@@ -1,0 +1,37 @@
+# tag 之间不能互相读取缓存；在默认分支预热，让后续发版直接复用依赖。
+name: Warm release dependencies
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'crates/**'
+      - 'src-tauri/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/**'
+      - 'rust-toolchain.toml'
+      - 'scripts/build-remote-agent.mjs'
+      - 'scripts/ci-release-cache*'
+      - '.github/workflows/build-msi.yml'
+      - '.github/workflows/build-linux.yml'
+      - '.github/workflows/release-cache.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-dependency-cache-${{ github.ref }}
+  # 让首次依赖编译完成，避免连续提交让缓存始终处于冷启动。
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    uses: ./.github/workflows/build-msi.yml
+    with:
+      warm_cache: true
+  linux:
+    uses: ./.github/workflows/build-linux.yml
+    with:
+      warm_cache: true

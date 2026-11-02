@@ -62,8 +62,9 @@ debug = "line-tables-only"
 debug = false
 
 [profile.release]
-lto = "fat"
-codegen-units = 1
+# ThinLTO 保留跨 crate 优化，让发版代码生成与链接可以并行。
+lto = "thin"
+codegen-units = 16
 panic = "abort"
 strip = "symbols"
 opt-level = "z"

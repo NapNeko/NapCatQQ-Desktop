@@ -8,7 +8,7 @@ if (process.platform !== 'win32') process.exit(0);
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const release = process.argv.includes('--release');
-const args = ['build', '-p', 'ncd-agent'];
+const args = ['build', '-p', 'ncd-agent', '--locked'];
 if (release) args.push('--release');
 const compiler = spawnSync('rustc', ['-vV'], { encoding: 'utf8' });
 if (compiler.error) throw compiler.error;
