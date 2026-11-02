@@ -15,7 +15,7 @@ PR 中前端单测步骤为 3 分 27 秒。两端打包本来已经并行，继�
 ## PR 门禁
 
 - 前端按 Vitest 原生 `--shard=1/2`、`--shard=2/2` 分片，保留测试隔离。类型、版本、探针和 Python helper 检查只运行一次。默认单测不收集覆盖率。
-- Windows core 与 runtime 并行；core 运行除 Tauri、runtime 外的全部 workspace 测试，runtime 运行自身全部测试。普通账户 Agent 用例仍执行真实非管理员进程，其编译参数与 core 一致。Tauri 保持独立 job。
+- Windows core 与 runtime 并行；core 运行除 Tauri、runtime、MCP 外的全部 workspace 测试，runtime 组运行 runtime 与依赖它的 MCP 测试，避免两组重复编译 runtime。普通账户 Agent 用例仍执行真实非管理员进程，其编译参数与 core 一致。Tauri 保持独立 job。
 - Linux 用一次 `cargo nextest run --workspace --all-targets` 编译全部目标，filterset 运行原有 host、Docker、安装回滚和 opener 契约。Windows 继续使用 `cargo test`，保留原有文档测试。
 - Linux 同 Windows 一样复用编译产物，按内容恢复 checkout 输入时间戳；源码变化仍使对应 Cargo 指纹失效。缓存失效集成测试移到 Linux job，不再阻塞所有 job 的入口。
 - 测试缓存按系统、Rust 工具链和编译参数隔离，不把 runner 镜像修订号作为失效条件，避免同批 Windows job 因镜像滚动更新而分别冷编译。旧 key 只作迁移回退。

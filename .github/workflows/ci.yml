@@ -280,9 +280,9 @@ jobs:
         shell: pwsh
         run: |
           if ('${{ matrix.group }}' -eq 'runtime') {
-            cargo test -p ncd-runtime --locked
+            cargo test -p ncd-runtime -p ncd-mcp --locked
           } else {
-            cargo test --workspace --exclude ncd-tauri --exclude ncd-runtime --locked
+            cargo test --workspace --exclude ncd-tauri --exclude ncd-runtime --exclude ncd-mcp --locked
           }
 
       - name: Assert generated IPC types committed

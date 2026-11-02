@@ -7,7 +7,8 @@ if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows') {
 
 function Build-AgentTests {
     $cargoArgs = @('test', '--workspace', '--exclude', 'ncd-tauri', '--locked', '--no-run', '--message-format=json')
-    if ($ExcludeRuntime) { $cargoArgs += @('--exclude', 'ncd-runtime') }
+    # MCP 依赖 runtime；与 core 的包选择一致，避免夹具间接编译 runtime。
+    if ($ExcludeRuntime) { $cargoArgs += @('--exclude', 'ncd-runtime', '--exclude', 'ncd-mcp') }
     $messages = @(& cargo @cargoArgs)
     if ($LASTEXITCODE -ne 0) {
         $messages | Write-Output
