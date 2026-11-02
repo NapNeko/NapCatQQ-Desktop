@@ -10,6 +10,7 @@ use ncd_host::Host;
 use std::sync::Arc;
 
 /// 凭据同步层:桥接 keyring 持久化与 Host 内存缓存
+#[derive(Clone)]
 pub struct CredentialSyncLayer {
     credentials: Arc<dyn ServerCredentialStore>,
 }

@@ -43,6 +43,15 @@ impl From<&str> for HostResolveError {
 /// 把 RuntimeTarget 解析成可用的 host。失败由 BotManager 转成启动失败事件。
 #[async_trait]
 pub trait HostResolver: Send + Sync {
+    fn connection_updates(&self) -> Option<crate::ConnectionUpdates> {
+        None
+    }
+
+    /// 只检查档案，不连接主机。无法确认档案已删除的实现应保留默认值。
+    async fn is_registered(&self, _target: &RuntimeTarget) -> Result<bool, HostResolveError> {
+        Ok(true)
+    }
+
     /// 解析 target -> host。Local 给本机 host;Server(id) 连远端。
     /// 实装应做连接复用(同一 server_id 多次解析共用一条连接)。
     async fn resolve(&self, target: &RuntimeTarget) -> Result<Arc<dyn Host>, HostResolveError>;

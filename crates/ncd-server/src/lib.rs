@@ -8,18 +8,22 @@ pub mod host_resolver;
 pub mod openssh_known_hosts;
 pub mod server_manager;
 pub mod server_profile_migration;
+mod session_kernel;
 pub mod ssh_config;
 pub mod ssh_keygen;
 
 pub use credential_sync::{CredentialSyncLayer, PasswordSlot};
 pub use host_resolver::{HostResolveError, HostResolver, LocalOnlyHostResolver};
 pub use server_manager::{
-    AuthMethod, ConnectionHealth, InMemoryCredentialStore, KeyringCredentialStore,
-    ProbeReport, ServerCredentialStore, ServerManager, ServerProfile, ServerState,
+    AuthMethod, ConnectionHealth, InMemoryCredentialStore, KeyringCredentialStore, ProbeReport,
+    ServerCredentialStore, ServerManager, ServerProfile, ServerState,
 };
 pub use server_profile_migration::{
     SERVER_PROFILE_COMPAT_VERSION, ServerProfileMigrationResult,
     migrate_legacy_single_server_app_config, migrate_server_profiles_payload,
 };
-pub use ssh_config::{DiscoveredSshHost};
+pub use session_kernel::{
+    ConnectionObserver, ConnectionSnapshot, ConnectionSnapshots, ConnectionUpdates,
+};
+pub use ssh_config::DiscoveredSshHost;
 pub use ssh_keygen::{GeneratedKeyPair, SshKeygenError, generate_ed25519};

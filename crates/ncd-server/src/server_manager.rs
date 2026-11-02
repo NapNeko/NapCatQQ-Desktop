@@ -339,6 +339,7 @@ impl ServerCredentialStore for InMemoryCredentialStore {
 // ServerProfileRepo:JSON 持久化
 
 /// servers.json 路径固定在 <data_root>/config/servers.json
+#[derive(Clone)]
 struct ServerProfileRepo {
     path: PathBuf,
     legacy_paths: Vec<PathBuf>,
@@ -434,6 +435,7 @@ async fn read_profiles_file(path: &Path) -> Option<Vec<ServerProfile>> {
 
 // ServerManager
 
+#[derive(Clone)]
 pub struct ServerManager {
     repo: ServerProfileRepo,
     sync: CredentialSyncLayer,
@@ -442,17 +444,7 @@ pub struct ServerManager {
     /// TOFU host key 数据库路径:<data_root>/secrets/known_hosts生产 SSH 连接
     /// 用 AcceptOnFirstUse 策略校验 host key,未知主机要用户确认后写到这里
     known_hosts_path: PathBuf,
-    /// 活跃 SSH 连接缓存:server_id → Arc<dyn Host>
-    hosts: Arc<RwLock<HashMap<String, Arc<dyn Host>>>>,
-    /// 每服务器的连接单飞锁:server_id → Mutex
-    ///
-    /// 组件页进来时会并发触发 5+ 个 detect,每个都可能在冷缓存下尝试自动连接
-    /// 同一台远端没有这把锁的话就是 5 个 SSH 握手同时砸过去,服务端
-    /// MaxStartups 很容易拒掉一部分(表现为时好时坏的探测失败)ensure_connected
-    /// 抢这把锁后会二次检查缓存,等锁期间别人连上了就直接复用,真连接只发生一次
-    connect_locks: Arc<RwLock<HashMap<String, Arc<Mutex<()>>>>>,
-    /// 自动连接失败后冷却,避免 detect 轮询刷 SSH 失败日志
-    auto_connect_cooldown_until: Arc<RwLock<HashMap<String, std::time::Instant>>>,
+    sessions: Arc<crate::session_kernel::SessionKernel>,
     /// 可选的事件总线,用于发布 HostConnectionLost / HostConnectionRecovered
     /// 由 Tauri 侧 wiring 时通过 set_event_bus 注入;未注入时不发事件(向后兼容)
     event_sink: Option<Arc<dyn EventBus>>,
@@ -465,9 +457,7 @@ impl ServerManager {
             sync: CredentialSyncLayer::new(credentials),
             key_dir: data_root.join("ssh_keys"),
             known_hosts_path: data_root.join("secrets").join("known_hosts"),
-            hosts: Arc::new(RwLock::new(HashMap::new())),
-            connect_locks: Arc::new(RwLock::new(HashMap::new())),
-            auto_connect_cooldown_until: Arc::new(RwLock::new(HashMap::new())),
+            sessions: Arc::new(crate::session_kernel::SessionKernel::default()),
             event_sink: None,
         }
     }
@@ -483,20 +473,50 @@ impl ServerManager {
     }
 
     pub async fn list_servers(&self) -> Vec<ServerProfile> {
-        self.repo.load().await
+        self.project_connection_states(self.repo.load().await)
     }
 
     /// 查询入口只读已有档案；旧版档案留在原位，避免读取触发迁移写盘。
     pub async fn list_servers_read_only(&self) -> Vec<ServerProfile> {
         if let Some(profiles) = read_profiles_file(&self.repo.path).await {
-            return profiles;
+            return self.project_connection_states(profiles);
         }
         for path in &self.repo.legacy_paths {
             if let Some(profiles) = read_profiles_file(path).await {
-                return profiles;
+                return self.project_connection_states(profiles);
             }
         }
         Vec::new()
+    }
+
+    /// 用于清理失去主机的记录；读取失败不能当作档案已删除。
+    pub async fn contains_server(&self, id: &str) -> Result<bool, String> {
+        for path in std::iter::once(&self.repo.path).chain(self.repo.legacy_paths.iter()) {
+            let text = match tokio::fs::read_to_string(path).await {
+                Ok(text) => text,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(format!("读取服务器档案失败: {error}")),
+            };
+            let value = serde_json::from_str(&text)
+                .map_err(|error| format!("读取服务器档案失败: {error}"))?;
+            let profiles = migrate_server_profiles_payload(value)
+                .map_err(|error| format!("读取服务器档案失败: {error}"))?
+                .profiles;
+            return Ok(profiles.iter().any(|profile| profile.id == id));
+        }
+        Ok(false)
+    }
+
+    fn project_connection_states(&self, mut profiles: Vec<ServerProfile>) -> Vec<ServerProfile> {
+        let updates = self.sessions.subscribe();
+        let states = updates.borrow();
+        for profile in &mut profiles {
+            profile.state = states
+                .get(&profile.id)
+                .map(|s| s.state.clone())
+                .unwrap_or(ServerState::Disconnected);
+        }
+        profiles
     }
 
     /// 添加档案时，若本机 OpenSSH known_hosts 已有该主机明文指纹，抄进应用
@@ -613,7 +633,9 @@ impl ServerManager {
         // 关键改进:SSH 密码变了必须清缓存,sudo 密码变了可以热更新
         if let Some(slot) = changed_slot {
             if self.sync.on_password_changed(&profile.id, slot) {
-                self.hosts.write().await.remove(&profile.id);
+                if let Some(host) = self.sessions.invalidate(&profile.id, None) {
+                    retire_host(host);
+                }
                 self.update_state(&profile.id, ServerState::Disconnected)
                     .await;
 
@@ -623,7 +645,7 @@ impl ServerManager {
                 }
             } else {
                 // sudo 密码变更:热更新缓存连接
-                if let Some(cached) = self.hosts.read().await.get(&profile.id) {
+                if let Some(cached) = self.sessions.host(&profile.id) {
                     self.sync
                         .sync_elevation_to_host(&profile.id, cached.as_ref())
                         .await;
@@ -631,7 +653,9 @@ impl ServerManager {
             }
         } else {
             // 连接信息可能已改(host/port/认证),丢弃缓存的旧连接
-            self.hosts.write().await.remove(&profile.id);
+            if let Some(host) = self.sessions.invalidate(&profile.id, None) {
+                retire_host(host);
+            }
             self.update_state(&profile.id, ServerState::Disconnected)
                 .await;
         }
@@ -810,10 +834,9 @@ impl ServerManager {
                 .set_elevation_password(Some(password.to_string()))
                 .await;
         }
-        self.hosts
-            .write()
-            .await
-            .insert(profile.id.clone(), verified_host);
+        let generation = self.sessions.begin(&profile.id);
+        self.sessions
+            .install(&profile.id, generation, verified_host);
         self.update_state(id, ServerState::Connected).await;
 
         Ok(updated)
@@ -836,18 +859,14 @@ impl ServerManager {
 
     /// 档案删除时清 SSH 缓存,单飞锁与自动连冷却表,避免 Map 只增不减
     async fn purge_server_runtime_maps(&self, id: &str) {
-        self.hosts.write().await.remove(id);
-        self.connect_locks.write().await.remove(id);
-        self.auto_connect_cooldown_until.write().await.remove(id);
+        if let Some(host) = self.sessions.remove(id) {
+            retire_host(host);
+        }
     }
 
     /// 冷却条目到期后仍留在 HashMap 里会造成慢泄漏;读路径顺手删掉已过期的键
     async fn prune_expired_auto_connect_cooldowns(&self) {
-        let now = std::time::Instant::now();
-        self.auto_connect_cooldown_until
-            .write()
-            .await
-            .retain(|_, until| *until > now);
+        self.sessions.prune_retries();
     }
 
     /// 为长操作(Docker 安装,组件安装等)创建隔离的 SSH 连接
@@ -954,6 +973,8 @@ impl ServerManager {
             .ok_or_else(|| format!("server not found: {id}"))?
             .clone();
 
+        let credentials = self.build_credentials(&profile, password.as_deref())?;
+        let generation = self.sessions.begin(id);
         self.seed_openssh_host_keys(&profile).await;
 
         let start = std::time::Instant::now();
@@ -966,7 +987,6 @@ impl ServerManager {
                 "正在测试 SSH 连接"
             );
         }
-        let credentials = self.build_credentials(&profile, password.as_deref())?;
         let connect_timeout = std::time::Duration::from_secs(if log_probe { 30 } else { 10 });
         let config = ConnectionConfig::new(
             &profile.host,
@@ -992,6 +1012,9 @@ impl ServerManager {
         let host = match connected {
             Ok(h) => h,
             Err(err) => {
+                if !self.sessions.is_current(id, generation) {
+                    return Err("远端档案或连接已变更，请重试".into());
+                }
                 self.update_state(id, ServerState::Failed).await;
 
                 // 更新 health 失败信息 + 递增连续失败计数 + 发布 lost 事件
@@ -1006,8 +1029,9 @@ impl ServerManager {
                     consecutive = h.consecutive_failures;
                 })
                 .await;
-                self.auto_connect_cooldown_until.write().await.insert(
-                    id.to_string(),
+                self.sessions.fail(
+                    id,
+                    generation,
                     std::time::Instant::now() + auto_connect_retry_delay(&err, consecutive),
                 );
                 self.publish_host_lost(id, Some(err_text), consecutive);
@@ -1077,8 +1101,10 @@ impl ServerManager {
         }
 
         self.inject_elevation_password(id, host.as_ref()).await;
-        self.hosts.write().await.insert(profile.id.clone(), host);
-        self.auto_connect_cooldown_until.write().await.remove(id);
+        if !self.sessions.install(id, generation, Arc::clone(&host)) {
+            retire_host(host);
+            return Err("远端档案或连接已变更，请重试".into());
+        }
         self.update_state(id, ServerState::Connected).await;
 
         // 更新 health 成功时间 + 归零失败计数 + 发布恢复事件
@@ -1150,7 +1176,15 @@ impl ServerManager {
 
     /// 获取已缓存的 Host 连接(test_connection 成功后可用)
     pub async fn get_host(&self, id: &str) -> Option<Arc<dyn Host>> {
-        self.hosts.read().await.get(id).cloned()
+        self.sessions.host(id)
+    }
+
+    pub fn connection_updates(&self) -> crate::ConnectionUpdates {
+        self.sessions.subscribe()
+    }
+
+    pub fn request_recovery(&self, id: &str, host: &Arc<dyn Host>) {
+        self.sessions.request_recovery(id, host);
     }
 
     /// 丢弃缓存中的 SSH 连接(会话已断或不可信时调用)
@@ -1158,7 +1192,8 @@ impl ServerManager {
     ///
     /// 同时更新 health(递增失败计数 + 记原因),并发布 HostConnectionLost 事件
     pub async fn disconnect_cached_host(&self, id: &str) {
-        if self.hosts.write().await.remove(id).is_some() {
+        if let Some(host) = self.sessions.invalidate(id, None) {
+            retire_host(host);
             self.update_state(id, ServerState::Disconnected).await;
 
             // health 失败分支 + 发布 lost
@@ -1191,9 +1226,23 @@ impl ServerManager {
     /// 失败返回人话错误,调用方把它显示在对应 host 那行
     pub async fn ensure_connected(&self, id: &str) -> Result<Arc<dyn Host>, String> {
         if let Some(host) = self.get_host(id).await {
-            return Ok(host);
+            if host.is_healthy().await {
+                return Ok(host);
+            }
+            if let Some(retired) = self.sessions.invalidate(id, Some(&host)) {
+                retire_host(retired);
+            }
         }
 
+        // 建连由主机内核持有；关闭页面只结束该调用者的等待，不取消其他请求所需的握手。
+        let manager = self.clone();
+        let id = id.to_owned();
+        tokio::spawn(async move { manager.connect_cached(&id).await })
+            .await
+            .map_err(|error| format!("远端连接任务失败：{error}"))?
+    }
+
+    async fn connect_cached(&self, id: &str) -> Result<Arc<dyn Host>, String> {
         self.prune_expired_auto_connect_cooldowns().await;
 
         self.check_auto_connect_cooldown(id).await?;
@@ -1215,7 +1264,7 @@ impl ServerManager {
 
         match self.test_connection_inner(id, None, false).await {
             Ok(report) if report.success => {
-                self.auto_connect_cooldown_until.write().await.remove(id);
+                self.sessions.set_retry(id, None);
                 self.get_host(id)
                     .await
                     .ok_or_else(|| format!("自动连接成功但缓存为空: {id}（不应发生）"))
@@ -1231,30 +1280,22 @@ impl ServerManager {
                 Err(format!("自动连接失败: {err}（请去远端页手动测试连接）"))
             }
             Err(err) => {
-                self.auto_connect_cooldown_until.write().await.insert(
-                    id.to_string(),
-                    std::time::Instant::now() + std::time::Duration::from_secs(90),
-                );
                 tracing::warn!(
                     target: "ncd_runtime::server_manager",
                     server_id = %id,
                     err = %err,
                     "远端自动连接被拒绝"
                 );
-                Err(format!(
-                    "自动连接被拒绝: {err}（凭据可能未保存，请去远端页手动测试）"
-                ))
+                Err(format!("自动连接被拒绝: {err}"))
             }
         }
     }
 
     async fn check_auto_connect_cooldown(&self, id: &str) -> Result<(), String> {
         if self
-            .auto_connect_cooldown_until
-            .read()
-            .await
-            .get(id)
-            .is_some_and(|until| *until > std::time::Instant::now())
+            .sessions
+            .retry_at(id)
+            .is_some_and(|until| until > std::time::Instant::now())
         {
             return Err("远端连接暂不可用，稍后自动重试；也可在远端页立即测试连接".into());
         }
@@ -1263,56 +1304,15 @@ impl ServerManager {
 
     /// 取(或惰性创建)某服务器的连接单飞锁
     async fn connect_lock_for(&self, id: &str) -> Arc<Mutex<()>> {
-        if let Some(lock) = self.connect_locks.read().await.get(id) {
-            return Arc::clone(lock);
-        }
-        let mut map = self.connect_locks.write().await;
-        Arc::clone(
-            map.entry(id.to_string())
-                .or_insert_with(|| Arc::new(Mutex::new(()))),
-        )
+        self.sessions.connect_lock(id)
     }
 
     // ============================================================
     // 自愈闭环 API:get_live_host / refresh_host / mark_unhealthy
     // ============================================================
 
-    /// 取"当前应存活"的 host
-    ///
-    /// - 缓存未命中 → 走 ensure_connected(含单飞 + 自动连 + 冷却)
-    /// - 缓存命中 → 先做廉价活性探测(is_healthy),成功则返回;失败则 mark_unhealthy + 驱逐 + 走 ensure_connected 重连
-    /// - 全程受单飞保护(复用/扩展 connect_locks)
-    ///
-    /// 语义:调用方可信返回的连接在本方法返回时刻是可达的(探测通过)
-    /// 失败时返回人话错误(与 ensure_connected 一致)
+    /// 取尚未报告断开的连接；重建由会话内核协调，业务请求仍须处理远端故障。
     pub async fn get_live_host(&self, id: &str) -> Result<Arc<dyn Host>, String> {
-        // 1. 先查缓存
-        if let Some(_host) = self.get_host(id).await {
-            // 2. 命中缓存 → 做廉价活性探测(带单飞)
-            let lock = self.connect_lock_for(id).await;
-            let _guard = lock.lock().await;
-
-            // 二次检查:等锁期间可能已被别人刷新/驱逐
-            if let Some(host2) = self.get_host(id).await {
-                // 3. 执行 is_healthy(带短超时保护已在 RemoteLinuxHost 内实现)
-                let start = std::time::Instant::now();
-                let healthy = host2.is_healthy().await;
-                let latency = start.elapsed().as_millis() as u64;
-
-                if healthy {
-                    // 探测成功 → 更新 health 成功时间 + 归零失败计数 + 发布恢复事件(若刚恢复)
-                    self.update_health_success(id, latency).await;
-                    return Ok(host2);
-                } else {
-                    // 探测失败 → 标记不健康,驱逐,发 lost 事件,然后走 ensure 重连
-                    self.mark_unhealthy_internal(id, Some("活性探测失败".to_string()))
-                        .await;
-                    // 继续走到 ensure_connected 分支
-                }
-            }
-        }
-
-        // 缓存未命中或探测失败后已驱逐 → 走标准 ensure 路径(含单飞 + 冷却)
         self.ensure_connected(id).await
     }
 
@@ -1322,7 +1322,8 @@ impl ServerManager {
     /// 刷新成功后会更新 health 并发布 Recovered 事件
     pub async fn refresh_host(&self, id: &str) -> Result<Arc<dyn Host>, String> {
         // 1. 驱逐旧缓存(若有)
-        if self.hosts.write().await.remove(id).is_some() {
+        if let Some(host) = self.sessions.invalidate(id, None) {
+            retire_host(host);
             info!(
                 target: "ncd_runtime::server_manager",
                 server_id = %id,
@@ -1351,7 +1352,7 @@ impl ServerManager {
                     .await;
                 return Ok(());
             }
-            self.mark_unhealthy_internal(id, Some("手动刷新时 SSH 探测失败".into()))
+            self.mark_unhealthy_internal(id, &host, Some("手动刷新时 SSH 探测失败".into()))
                 .await;
         }
         let report = self.test_connection_inner(id, None, false).await?;
@@ -1367,13 +1368,27 @@ impl ServerManager {
     ///
     /// 内部会更新 health(递增连续失败计数 + 记失败原因/时间),并发布 HostConnectionLost 事件
     pub async fn mark_unhealthy(&self, id: &str) {
-        self.mark_unhealthy_internal(id, None).await;
+        if let Some(host) = self.sessions.host(id) {
+            self.mark_unhealthy_internal(id, &host, None).await;
+        }
     }
 
     /// mark_unhealthy 的内部实现,reason 为 None 时使用默认文案
-    async fn mark_unhealthy_internal(&self, id: &str, reason: Option<String>) {
+    async fn mark_unhealthy_internal(
+        &self,
+        id: &str,
+        host: &Arc<dyn Host>,
+        reason: Option<String>,
+    ) {
         // 1. 驱逐缓存
-        let removed = self.hosts.write().await.remove(id).is_some();
+        let retired = self.sessions.invalidate(id, Some(host));
+        let removed = retired.is_some();
+        if !removed {
+            return;
+        }
+        if let Some(host) = retired {
+            retire_host(host);
+        }
 
         // 2. 更新 ServerProfile.state
         self.update_state(id, ServerState::Disconnected).await;
@@ -1572,7 +1587,7 @@ impl ServerManager {
                         let lock = self.connect_lock_for(&id).await;
                         let Ok(_guard) = lock.try_lock() else { continue; };
                         // 快速检查缓存
-                        let host_opt = self.hosts.read().await.get(&id).cloned();
+                        let host_opt = self.sessions.host(&id);
                         let Some(host) = host_opt else {
                             // 缓存已无,说明已断开或被其他路径驱逐,跳过
                             continue;
@@ -1584,7 +1599,7 @@ impl ServerManager {
 
                         if !healthy {
                             // 失败:走内部路径(会驱逐,更新 state/health,发 lost 事件)
-                            self.mark_unhealthy_internal(&id, Some("后台探活失败".to_string()))
+                            self.mark_unhealthy_internal(&id, &host, Some("后台探活失败".to_string()))
                                 .await;
                         }
                     }
@@ -1592,6 +1607,16 @@ impl ServerManager {
             }
         }
     }
+}
+
+pub(crate) fn retire_host(host: Arc<dyn Host>) {
+    tokio::spawn(async move {
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            host.invalidate_connection(),
+        )
+        .await;
+    });
 }
 
 fn windows_key_auth_command(public_line: &str) -> ncd_host::HostCommand {
@@ -1989,20 +2014,17 @@ mod tests {
     #[cfg(test)]
     impl ServerManager {
         async fn test_has_connect_lock(&self, id: &str) -> bool {
-            self.connect_locks.read().await.contains_key(id)
+            self.sessions.contains(id)
         }
 
         async fn test_has_auto_connect_cooldown(&self, id: &str) -> bool {
-            self.auto_connect_cooldown_until
-                .read()
-                .await
-                .contains_key(id)
+            self.sessions.retry_at(id).is_some()
         }
 
         async fn test_seed_auto_connect_cooldown(&self, id: &str) {
-            self.auto_connect_cooldown_until.write().await.insert(
-                id.to_string(),
-                std::time::Instant::now() + std::time::Duration::from_secs(300),
+            self.sessions.set_retry(
+                id,
+                Some(std::time::Instant::now() + std::time::Duration::from_secs(300)),
             );
         }
 
@@ -2011,14 +2033,11 @@ mod tests {
         }
 
         async fn test_cooldown_map_len(&self) -> usize {
-            self.auto_connect_cooldown_until.read().await.len()
+            self.sessions.retry_count()
         }
 
         async fn test_set_cooldown_until(&self, id: &str, until: std::time::Instant) {
-            self.auto_connect_cooldown_until
-                .write()
-                .await
-                .insert(id.to_string(), until);
+            self.sessions.set_retry(id, Some(until));
         }
 
         async fn test_prune_expired_cooldowns(&self) {
@@ -2064,6 +2083,43 @@ mod tests {
         assert_eq!(list[0].name, "My Server");
 
         assert_eq!(creds.get_password("s1"), Some("pw123".into()));
+    }
+
+    #[tokio::test]
+    async fn contains_server_distinguishes_removed_profiles_from_unreadable_files() {
+        let root = tempdir().unwrap();
+        let (mgr, _) = make_mgr(root.path());
+        mgr.add_server(make_profile("s1", "Server"), None)
+            .await
+            .unwrap();
+        assert!(mgr.contains_server("s1").await.unwrap());
+        assert!(!mgr.contains_server("missing").await.unwrap());
+
+        tokio::fs::write(&mgr.repo.path, "[]").await.unwrap();
+        assert!(!mgr.contains_server("s1").await.unwrap());
+
+        tokio::fs::write(&mgr.repo.path, "{broken").await.unwrap();
+        assert!(mgr.contains_server("s1").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn contains_server_uses_legacy_profiles_only_when_current_file_is_absent() {
+        let root = tempdir().unwrap();
+        let (mgr, _) = make_mgr(root.path());
+        let legacy = &mgr.repo.legacy_paths[0];
+        tokio::fs::create_dir_all(legacy.parent().unwrap())
+            .await
+            .unwrap();
+        let profiles = serde_json::to_string(&vec![make_profile("s1", "Server")]).unwrap();
+        tokio::fs::write(legacy, profiles).await.unwrap();
+        assert!(mgr.contains_server("s1").await.unwrap());
+        assert!(!mgr.repo.path.exists());
+
+        tokio::fs::create_dir_all(mgr.repo.path.parent().unwrap())
+            .await
+            .unwrap();
+        tokio::fs::write(&mgr.repo.path, "[]").await.unwrap();
+        assert!(!mgr.contains_server("s1").await.unwrap());
     }
 
     #[tokio::test]
