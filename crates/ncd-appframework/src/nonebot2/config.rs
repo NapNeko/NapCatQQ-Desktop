@@ -160,23 +160,40 @@ async fn read_optional_text(
     host: &dyn Host,
     path: &HostPath,
 ) -> Result<Option<String>, AppFrameworkError> {
-    if !host
-        .exists(path)
-        .await
-        .map_err(|e| AppFrameworkError::Host(e.to_string()))?
-    {
-        return Ok(None);
-    }
-    let bytes = host
-        .read_file(path)
-        .await
-        .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
+    let bytes = match host.read_file(path).await {
+        Ok(bytes) => bytes,
+        Err(ncd_host::HostError::PathNotFound { .. }) => return Ok(None),
+        Err(error) => return Err(AppFrameworkError::Host(error.to_string())),
+    };
     Ok(Some(String::from_utf8_lossy(&bytes).into_owned()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn optional_env_reads_once_and_preserves_permission_failures() {
+        let host = crate::config_backup::tests::TestHost::new("remote:env");
+        let path = HostPath::from_posix("/app/.env");
+        assert!(
+            read_optional_text(host.as_ref(), &path)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        host.put("/app/.env", b"ENVIRONMENT=prod\n");
+        assert_eq!(
+            read_optional_text(host.as_ref(), &path)
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("ENVIRONMENT=prod\n")
+        );
+        assert_eq!(host.access_counts("/app/.env"), (0, 2));
+        host.deny_read("/app/.env");
+        assert!(read_optional_text(host.as_ref(), &path).await.is_err());
+    }
 
     #[test]
     fn outbound_ws_urls_parse_json_array_and_single() {

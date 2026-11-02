@@ -18,6 +18,7 @@ pub(crate) struct TestHost {
     nodes: Mutex<BTreeMap<String, Node>>,
     fail_once: Mutex<Option<String>>,
     accesses: Mutex<BTreeMap<String, (usize, usize)>>,
+    denied_read: Mutex<Option<String>>,
     shell: ncd_host::shell::BashShell,
 }
 
@@ -28,6 +29,7 @@ impl TestHost {
             nodes: Mutex::new(BTreeMap::new()),
             fail_once: Mutex::new(None),
             accesses: Mutex::new(BTreeMap::new()),
+            denied_read: Mutex::new(None),
             shell: ncd_host::shell::BashShell,
         });
         host.nodes.lock().unwrap().insert(
@@ -77,6 +79,10 @@ impl TestHost {
             .unwrap_or_default()
     }
 
+    pub(crate) fn deny_read(&self, path: &str) {
+        *self.denied_read.lock().unwrap() = Some(path.into());
+    }
+
     pub(crate) fn content(&self, path: &str) -> Option<Vec<u8>> {
         self.nodes
             .lock()
@@ -104,6 +110,12 @@ impl Host for TestHost {
         &self.shell
     }
     async fn read_file(&self, path: &HostPath) -> Result<Bytes, HostError> {
+        if self.denied_read.lock().unwrap().as_deref() == Some(path.as_posix()) {
+            return Err(HostError::PermissionDenied {
+                path: path.clone(),
+                operation: "read",
+            });
+        }
         self.accesses
             .lock()
             .unwrap()

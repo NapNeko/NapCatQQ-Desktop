@@ -499,23 +499,40 @@ pub async fn read_optional_text(
     host: &dyn Host,
     path: &HostPath,
 ) -> Result<Option<String>, AppFrameworkError> {
-    if !host
-        .exists(path)
-        .await
-        .map_err(|e| AppFrameworkError::Host(e.to_string()))?
-    {
-        return Ok(None);
-    }
-    let bytes = host
-        .read_file(path)
-        .await
-        .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
+    let bytes = match host.read_file(path).await {
+        Ok(bytes) => bytes,
+        Err(ncd_host::HostError::PathNotFound { .. }) => return Ok(None),
+        Err(error) => return Err(AppFrameworkError::Host(error.to_string())),
+    };
     Ok(Some(String::from_utf8_lossy(&bytes).into_owned()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn optional_config_reads_once_and_preserves_permission_failures() {
+        let host = crate::config_backup::tests::TestHost::new("remote:config");
+        let path = HostPath::from_posix("/app/config.toml");
+        assert!(
+            read_optional_text(host.as_ref(), &path)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        host.put("/app/config.toml", b"[bot]\n");
+        assert_eq!(
+            read_optional_text(host.as_ref(), &path)
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("[bot]\n")
+        );
+        assert_eq!(host.access_counts("/app/config.toml"), (0, 2));
+        host.deny_read("/app/config.toml");
+        assert!(read_optional_text(host.as_ref(), &path).await.is_err());
+    }
 
     fn snap(id: &str, text: &str) -> DocumentSnapshot {
         let doc = neobot_config_documents()
@@ -655,7 +672,8 @@ mod tests {
             "app/data/plugins_data/dashboard/config.toml"
         );
         assert!(docs.iter().all(|d| d.format == AppConfigFormat::Toml));
-        assert!(docs[0].hot_reload);
+        assert!(!docs[0].hot_reload, "原文保存不会自动触发重载");
+        assert!(docs[0].reload_note.as_deref().unwrap().contains("/reload"));
         assert!(!docs[1].hot_reload, "面板监听设置需重启进程");
     }
 

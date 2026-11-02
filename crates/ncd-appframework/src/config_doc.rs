@@ -2,7 +2,7 @@
 
 use crate::adapter::apply_with_backup_snapshots;
 use ncd_domain::{AppConfigDocument, AppConfigFormat, AppConfigIssue, AppConfigText};
-use ncd_host::{Host, HostPath};
+use ncd_host::{Host, HostError, HostPath};
 use ncd_traits::AppFrameworkError;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -85,21 +85,17 @@ pub async fn read_document(
     doc: &AppConfigDocument,
 ) -> Result<DocumentSnapshot, AppFrameworkError> {
     let path = document_path(install_dir, doc);
-    let exists = host
-        .exists(&path)
-        .await
-        .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
-    if !exists {
-        return Ok(DocumentSnapshot {
-            doc: doc.clone(),
-            text: None,
-            revision: MISSING_REVISION.to_string(),
-        });
-    }
-    let bytes = host
-        .read_file(&path)
-        .await
-        .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
+    let bytes = match host.read_file(&path).await {
+        Ok(bytes) => bytes,
+        Err(HostError::PathNotFound { .. }) => {
+            return Ok(DocumentSnapshot {
+                doc: doc.clone(),
+                text: None,
+                revision: MISSING_REVISION.to_string(),
+            });
+        }
+        Err(error) => return Err(AppFrameworkError::Host(error.to_string())),
+    };
     Ok(DocumentSnapshot {
         doc: doc.clone(),
         revision: revision_of(&bytes),
@@ -291,6 +287,17 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn permission_failure_is_not_treated_as_a_missing_config() {
+        let host = crate::config_backup::tests::TestHost::new("remote:files");
+        host.put("/app/config/app.json", b"{}");
+        host.deny_read("/app/config/app.json");
+        assert!(matches!(
+            read_document(host.as_ref(), &HostPath::from_posix("/app"), &json_doc()).await,
+            Err(AppFrameworkError::Host(_)),
+        ));
+    }
+
+    #[tokio::test]
     async fn raw_save_reads_existing_file_once_for_version_and_backup() {
         for check_revision in [true, false] {
             let host = crate::config_backup::tests::TestHost::new("remote:files");
@@ -308,7 +315,7 @@ mod tests {
             )
             .await
             .unwrap();
-            assert_eq!(host.access_counts("/app/config/app.json"), (1, 1));
+            assert_eq!(host.access_counts("/app/config/app.json"), (0, 1));
             assert_eq!(
                 host.content("/app/config/app.json.ncd.bak").unwrap(),
                 original.as_bytes()
