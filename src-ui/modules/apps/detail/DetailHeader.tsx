@@ -1,11 +1,12 @@
-// 详情页头部：名字 + 运行状态 + 身份行（框架 · 主机端口 · 对接），右侧生命周期按钮和更多菜单。
+// 应用实例状态与管理入口。
 
 import {
     ArrowLeft,
     Download,
     ExternalLink,
+    FolderOpen,
+    KeyRound,
     Link2,
-    MessageSquare,
     MoreHorizontal,
     Play,
     Power,
@@ -54,11 +55,11 @@ export const DetailHeader: React.FC<{
     onInstall: () => void;
     onStart: () => void;
     onStop: () => void;
-    /** 只有 AstrBot 运行时给；它自带网页对话 */
-    onTryChat?: () => void;
     onLink: () => void;
     onUnlink: () => void;
     onWebUi: () => void;
+    onWebUiAccount?: () => void;
+    onOpenDirectory?: () => void;
     onRefresh: () => void;
     onDelete: () => void;
     onAutoStartChange: (autoStart: boolean) => void;
@@ -79,10 +80,11 @@ export const DetailHeader: React.FC<{
     onInstall,
     onStart,
     onStop,
-    onTryChat,
     onLink,
     onUnlink,
     onWebUi,
+    onWebUiAccount,
+    onOpenDirectory,
     onRefresh,
     onDelete,
     onAutoStartChange,
@@ -154,10 +156,16 @@ export const DetailHeader: React.FC<{
                         安装
                     </Button>
                 )}
-                {onTryChat && (
-                    <Button size="sm" variant="ghost" disabled={busy} onClick={onTryChat}>
-                        <ActionMotionIcon icon={MessageSquare} size={13} />
-                        试聊
+                {canWebUi && (
+                    <Button size="sm" variant="primary" disabled={busy} onClick={onWebUi}>
+                        <ActionMotionIcon icon={ExternalLink} size={13} />
+                        打开 WebUI
+                    </Button>
+                )}
+                {installed && (
+                    <Button size="sm" variant="secondary" disabled={busy} onClick={onLink}>
+                        <ActionMotionIcon icon={Link2} size={13} />
+                        {instance.link ? '改绑 Bot' : '一键对接'}
                     </Button>
                 )}
                 {installed && terminalEnabled && (
@@ -210,20 +218,20 @@ export const DetailHeader: React.FC<{
                                 <div className="my-1 h-px bg-border-subtle" />
                             </>
                         )}
-                        {installed && (
-                            <MoreItem
-                                icon={Link2}
-                                label={instance.link ? '改绑' : '对接'}
-                                onClick={onLink}
-                            />
-                        )}
                         {instance.link && (
                             <MoreItem icon={Unlink} label="解除对接" onClick={onUnlink} />
                         )}
-                        {canWebUi && (
-                            <MoreItem icon={ExternalLink} label="打开 WebUI" onClick={onWebUi} />
-                        )}
                         <MoreItem icon={RefreshCw} label="重新探测" onClick={onRefresh} />
+                        {onWebUiAccount && (
+                            <MoreItem icon={KeyRound} label="WebUI 账号" onClick={onWebUiAccount} />
+                        )}
+                        {onOpenDirectory && (
+                            <MoreItem
+                                icon={FolderOpen}
+                                label="打开目录"
+                                onClick={onOpenDirectory}
+                            />
+                        )}
                         {onReinstall && (
                             <MoreItem
                                 icon={Download}

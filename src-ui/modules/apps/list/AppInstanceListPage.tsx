@@ -51,6 +51,8 @@ import gridStyles from './appCardGrid.module.css';
 
 export type DetailTabHint = 'config' | 'log';
 
+const EMPTY_MANIFESTS: AppFrameworkManifest[] = [];
+
 export interface AppInstanceListPageProps {
     onNavigate?: (route: AppRoute) => void;
     onOpenInstance: (instanceId: string, tab?: DetailTabHint) => void;
@@ -68,7 +70,7 @@ export const AppInstanceListPage: React.FC<AppInstanceListPageProps> = ({
     const [deleteInstance, setDeleteInstance] = useState<AppInstance | null>(null);
     const [importTarget, setImportTarget] = useState<ImportInstanceTarget | null>(null);
 
-    const manifests = frameworks.data ?? [];
+    const manifests = frameworks.data ?? EMPTY_MANIFESTS;
     const manifestById = useMemo(
         () => new Map(manifests.map((m) => [m.id, m] as const)),
         [manifests],
@@ -382,7 +384,7 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
                     ) : i.link ? (
                         <p className="truncate">对接 Bot {i.link.bot_id}</p>
                     ) : !installed ? (
-                        <p className="truncate text-text-tertiary">安装后才能启动与配置</p>
+                        <p className="truncate text-text-tertiary">安装后即可启动和对接</p>
                     ) : null}
                 </div>
             </div>

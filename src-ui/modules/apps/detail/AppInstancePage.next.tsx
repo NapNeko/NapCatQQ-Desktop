@@ -1,9 +1,18 @@
-// 应用端实例详情：头部 + 左侧分组导航 + 内容区 + 底部保存条。
-// 框架专有页走 registry，未知框架只有原始文件和日志。
+// 应用实例管理与配置文件编辑。
 
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Download, ListChecks } from 'lucide-react';
-import { Button, PagePlaceholder, Tabs, TabsContent, TooltipProvider } from '../../../shared/ui';
+import {
+    Button,
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    PagePlaceholder,
+    Tabs,
+    TabsContent,
+    TooltipProvider,
+} from '../../../shared/ui';
 import { ActionMotionIcon, EMPHASIS_MOTION } from '../../../shared/ui/motion';
 import { useServerManager } from '../../../hooks/remote/useServerManager';
 import { useAppFrameworks, useAppInstances } from '../../../hooks/apps/useAppInstances';
@@ -16,24 +25,15 @@ import { DeleteInstanceDialog } from '../DeleteInstanceDialog';
 import { hostIdDisplayLabel } from '../hostLabel';
 import { isInstalled } from '../../../core/domain/apps/instanceState';
 import { cn } from '../../../shared/utils/cn';
-import { ConfigConflictDialog } from './ConfigConflictDialog';
 import { DetailHeader } from './DetailHeader';
 import { DetailSideNav } from './DetailSideNav';
 import { InstanceLogTab } from './InstanceLogTab';
 import { InstanceVersionTab } from './InstanceVersionTab';
 import { PaneLoading } from './PaneStatus';
-import { RawFilesTab } from './RawFilesTab';
-import { SaveBar } from './SaveBar';
-import { STORE_TOOLBAR_SLOT_ID } from './storeToolbar';
-import {
-    buildDetailNav,
-    resolveFrameworkUi,
-    type FrameworkSaveHandle,
-    type NavBadges,
-} from './frameworkUi';
+import { InstanceConfigEditor } from './InstanceConfigEditor';
+import { WebUiAccountCard } from './WebUiAccountCard';
 import type { DetailTabHint } from '../list/AppInstanceListPage';
-import type { AppConfigIssue, AppInstance } from '../../../core/ipc/types';
-import type { AppRoute } from '../../../shared/components/next/Sidebar';
+import type { AppInstance } from '../../../core/ipc/types';
 
 export interface AppInstancePageNextProps {
     instanceId: string;
@@ -41,8 +41,6 @@ export interface AppInstancePageNextProps {
     onBack: () => void;
     /** 安装中「在任务队列查看」要跳走；没给就不显示这个按钮 */
     onViewTasks?: () => void;
-    /** 跳到别的页（框架页签里「去机器人页新建」这类指路用）；没给就不显示那些按钮 */
-    onNavigate?: (route: AppRoute) => void;
 }
 
 export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
@@ -50,7 +48,6 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
     initialTab,
     onBack,
     onViewTasks,
-    onNavigate,
 }) => {
     const apps = useAppInstances();
     const frameworks = useAppFrameworks();
@@ -66,55 +63,23 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
     const versions = useAppFrameworkVersions(instance?.framework_id);
     const latestVersion = versions.data?.latest ?? null;
 
-    const ui = instance ? resolveFrameworkUi(instance.framework_id) : undefined;
-    // 支持按版本安装的框架才给「版本」页：不支持就没有可选项
-    const nav = useMemo(
-        () => buildDetailNav(ui, { withVersionTab: !!versions.data }),
-        [ui, versions.data],
-    );
     const installed = !!instance && isInstalled(instance);
     const running = instance?.state === 'running';
-    const FrameworkDetail = ui?.Detail;
-
-    const defaultTab = initialTab === 'log' ? 'log' : installed && ui ? ui.defaultTab : 'raw';
-    const [activeTab, setActiveTab] = useState(defaultTab);
-    const [userSwitched, setUserSwitched] = useState(false);
-    const [saveHandle, setSaveHandle] = useState<FrameworkSaveHandle | null>(null);
-    const [navBadges, setNavBadges] = useState<NavBadges>({});
+    const [activeTab, setActiveTab] = useState<string>(initialTab ?? 'config');
 
     useEffect(() => {
-        if (userSwitched || !instance) return;
-        setActiveTab(initialTab === 'log' ? 'log' : installed && ui ? ui.defaultTab : 'raw');
-    }, [instance, installed, ui, initialTab, userSwitched]);
-
-    // 换实例时别把上一个框架的圆点带过来
-    useEffect(() => setNavBadges({}), [instanceId]);
+        setActiveTab(initialTab ?? 'config');
+    }, [instanceId, initialTab]);
 
     const [linkOpen, setLinkOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
+    const [accountOpen, setAccountOpen] = useState(false);
     /** 重装并指定版本；未安装时是「立即安装」的带版本入口 */
     const [reinstallOpen, setReinstallOpen] = useState(false);
     /** 用户为这次安装挑的版本；null = 最新正式版 */
     const [installVersion, setInstallVersion] = useState<string | null>(null);
     // 已装的版本比上游最新正式版旧：头部与「更多」菜单都要提示
     const hasUpdate = hasAppUpdate(instance?.installed_version, latestVersion);
-
-    const goTab = (tab: string) => {
-        setUserSwitched(true);
-        setActiveTab(tab);
-    };
-
-    const jumpToFirstIssue = (issues: AppConfigIssue[]) => {
-        const first = issues[0];
-        if (!first || !ui) return;
-        goTab(ui.tabForIssue(first.path));
-    };
-
-    const handleSave = async (overwrite = false) => {
-        if (!saveHandle) return;
-        const outcome = await saveHandle.save(overwrite);
-        if (outcome.kind === 'invalid' && outcome.issues) jumpToFirstIssue(outcome.issues);
-    };
 
     if (apps.isLoading && !instance) {
         return <PaneLoading text="正在读取实例…" />;
@@ -133,17 +98,7 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
     }
 
     const busy = apps.pendingId === instance.id || instance.state === 'installing';
-    const showSaveBar = !!ui && ui.typedTabs.has(activeTab);
-    const fillPane =
-        activeTab === 'raw' || activeTab === 'log' || !!ui?.fillPaneTabs.has(activeTab);
-
-    // 填错的页亮红点，盖过框架给的下一步 / 冲突点：挡着保存的事最急
-    const issueTabs = ui && saveHandle ? saveHandle.issuePaths.map(ui.tabForIssue) : [];
-    const badges: NavBadges = {
-        ...navBadges,
-        ...Object.fromEntries(issueTabs.map((t) => [t, 'error' as const])),
-    };
-    const firstIssueTab = issueTabs[0];
+    const fillPane = activeTab === 'log' || activeTab === 'config';
 
     return (
         <TooltipProvider delayDuration={200}>
@@ -159,16 +114,21 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                     onInstall={() => apps.install(instance.id, installVersion)}
                     onStart={() => apps.start(instance.id)}
                     onStop={() => apps.stop(instance.id)}
-                    onTryChat={
-                        running && instance.framework_id === 'astrbot'
-                            ? () => void apps.openWebUi(instance.id, '/chat')
-                            : running && instance.framework_id === 'koishi'
-                              ? () => goTab('sandbox')
-                              : undefined
-                    }
                     onLink={() => setLinkOpen(true)}
                     onUnlink={() => apps.unlink(instance.id)}
                     onWebUi={() => void apps.openWebUi(instance.id)}
+                    onWebUiAccount={
+                        installed && manifest?.webui_auth === 'user_password'
+                            ? () => setAccountOpen(true)
+                            : undefined
+                    }
+                    onOpenDirectory={
+                        installed &&
+                        instance.host_id === 'local' &&
+                        instance.placement === 'local_native'
+                            ? () => void apps.openDirectory(instance.id)
+                            : undefined
+                    }
                     onRefresh={() => apps.refresh(instance.id)}
                     onDelete={() => setDeleteOpen(true)}
                     onAutoStartChange={(autoStart) =>
@@ -194,34 +154,24 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                 ) : (
                     <Tabs
                         value={activeTab}
-                        onValueChange={goTab}
+                        onValueChange={setActiveTab}
                         orientation="vertical"
                         className="flex min-h-0 flex-1"
                     >
-                        <DetailSideNav groups={nav} badges={badges} />
+                        <DetailSideNav withVersionTab={!!versions.data} />
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                            {/* 插件商店把搜索 / 筛选挂进来；别的页没往里放东西时整行不占位 */}
-                            <div
-                                id={STORE_TOOLBAR_SLOT_ID}
-                                className="flex min-w-0 shrink-0 items-center justify-end gap-2 pl-5 pr-3 pt-3 empty:hidden"
-                            />
                             <div
                                 className={cn(
                                     'flex min-h-0 flex-1 flex-col pl-5 pr-3 pt-2',
                                     fillPane ? 'overflow-hidden' : 'overflow-y-auto',
                                 )}
                             >
-                                {FrameworkDetail && (
-                                    <FrameworkDetail
-                                        instance={instance}
-                                        onSaveHandle={setSaveHandle}
-                                        onGoTab={goTab}
-                                        onOpenLink={() => setLinkOpen(true)}
-                                        onOpenWebUi={() => void apps.openWebUi(instance.id)}
-                                        onNavigate={onNavigate}
-                                        onNavBadges={setNavBadges}
-                                    />
-                                )}
+                                <TabsContent
+                                    value="config"
+                                    className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
+                                >
+                                    <InstanceConfigEditor key={instance.id} instance={instance} />
+                                </TabsContent>
                                 <TabsContent
                                     value="version"
                                     className="flex min-h-0 flex-1 flex-col pt-2"
@@ -240,33 +190,12 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                                     />
                                 </TabsContent>
                                 <TabsContent
-                                    value="raw"
-                                    className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
-                                >
-                                    <RawFilesTab instance={instance} />
-                                </TabsContent>
-                                <TabsContent
                                     value="log"
                                     className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
                                 >
                                     <InstanceLogTab instance={instance} />
                                 </TabsContent>
                             </div>
-                            <div id="karin-connections-add-dock" />
-                            {showSaveBar && saveHandle && (
-                                <SaveBar
-                                    dirty={saveHandle.dirty}
-                                    saving={saveHandle.saving}
-                                    issueCount={saveHandle.issueCount}
-                                    onSave={() => void handleSave()}
-                                    onCancel={saveHandle.reset}
-                                    onLocate={
-                                        firstIssueTab && firstIssueTab !== activeTab
-                                            ? () => goTab(firstIssueTab)
-                                            : undefined
-                                    }
-                                />
-                            )}
                         </div>
                     </Tabs>
                 )}
@@ -276,6 +205,15 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                     onOpenChange={setLinkOpen}
                     instanceId={linkOpen ? instance.id : null}
                 />
+
+                <Dialog open={accountOpen} onOpenChange={setAccountOpen}>
+                    <DialogContent size="sm" aria-describedby={undefined}>
+                        <DialogHeader>
+                            <DialogTitle>WebUI 账号</DialogTitle>
+                        </DialogHeader>
+                        {accountOpen && <WebUiAccountCard instance={instance} />}
+                    </DialogContent>
+                </Dialog>
 
                 <ReinstallDialog
                     open={reinstallOpen}
@@ -301,14 +239,6 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                         onBack();
                     }}
                 />
-
-                <ConfigConflictDialog
-                    open={!!saveHandle?.conflict}
-                    busy={!!saveHandle?.saving}
-                    onCancel={() => saveHandle?.dismissConflict()}
-                    onReload={() => void saveHandle?.reloadDiscard()}
-                    onOverwrite={() => void handleSave(true)}
-                />
             </div>
         </TooltipProvider>
     );
@@ -326,7 +256,7 @@ const NotInstalledBody: React.FC<{
 }> = ({ instance, busy, onInstall, onPickVersion, installVersion, latestVersion, onViewTasks }) =>
     instance.state === 'installing' ? (
         <PagePlaceholder className="gap-3 py-16">
-            <p className="text-sm text-text-secondary">正在安装，完成后即可配置</p>
+            <p className="text-sm text-text-secondary">正在安装，完成后即可启动和对接</p>
             <DetailInstallProgress instance={instance} />
             {onViewTasks && (
                 <Button size="sm" variant="secondary" onClick={onViewTasks}>
@@ -337,7 +267,7 @@ const NotInstalledBody: React.FC<{
         </PagePlaceholder>
     ) : (
         <PagePlaceholder className="gap-3 py-16">
-            <p className="text-sm text-text-secondary">实例尚未安装，安装后才能配置与查看日志</p>
+            <p className="text-sm text-text-secondary">实例尚未安装</p>
             <p className="text-xs text-text-tertiary">
                 {installVersion
                     ? `将安装 ${installVersion}`
