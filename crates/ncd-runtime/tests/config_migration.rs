@@ -51,8 +51,7 @@ fn transaction_failure_restores_previous_files() {
 #[test]
 fn secret_store_failure_keeps_legacy_field() {
     let secrets = MockSecretStore::new();
-    // 注入一次 put 失败,模拟存储不可用
-    secrets.fail_next_put("simulated unavailable");
+    secrets.fail_next_put();
 
     let result = ncd_runtime::migration::migrate_payload_for_tests(
         serde_json::json!([{

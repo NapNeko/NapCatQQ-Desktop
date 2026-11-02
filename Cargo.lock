@@ -3780,6 +3780,7 @@ version = "0.1.0"
 dependencies = [
  "ncd-domain",
  "ncd-traits",
+ "tempfile",
 ]
 
 [[package]]
