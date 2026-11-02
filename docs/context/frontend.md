@@ -46,7 +46,7 @@ flowchart TB
 
 跨 IPC 的类型由 Rust 侧 ts-rs 导出到 `core/ipc/generated/<short-name>/`，`core/ipc/types.ts` 只 re-export。service 里手写的载荷接口是待换成生成类型的旧账，别再加新的；有生成类型的直接从 `generated/**` 引（`SnowLumaAgreementsPayload` / `QQProcessInfo` 已换）。设置页拍平的 `BackendSettings` / `AfterCloseUiBehavior` / `UiModeOnStartup` 位于 `core/domain/settings/backendSettings.ts`，由 service 负责与生成的 `AppSettings` 映射。
 
-`core/domain/*`：零运行时依赖，禁止 `import 'react'` / `'@tauri-apps/*'` / `'@tanstack/*'`。只放纯函数 + 类型 + reducer + 文案表，配单测。可以 import `core/ipc/types` 与 `core/ipc/generated/**`。按域分目录：`apps/`（实例状态、对接拓扑、商店与插件目录、各框架配置校验、麦麦的试聊 / 表情包 / 提示词…）/ `bot/` / `bootstrap/` / `components/` / `docker/` / `events/`（登录、SnowLuma 聚合，日志缓冲）/ `onboarding/` / `overview/` / `performance/` / `release/` / `remote-host/` / `settings/` / `task-queue/` / `terminal/` / `debug/`（调试台的目录整理与命令面板排序、事件流 reduce 与聊天文案、参数表单与校验、收藏整理、历史重放、安全分级 / 错误 / 通道文案、三栏宽度规则）/ `ui/`（错误条文案、相对时间）/ `webui/`，根上还有 `errors.ts`（`errorText`，把 invoke 抛出的裸字符串和 Error 统一成人话）/ `app-meta.ts` / `credits.ts` / `desktop-log.ts`。
+`core/domain/*`：零运行时依赖，禁止 `import 'react'` / `'@tauri-apps/*'` / `'@tanstack/*'`。只放纯函数 + 类型 + reducer + 文案表；测试按[测试取舍与夹具边界](testing.md)保护业务规则与外部契约。可以 import `core/ipc/types` 与 `core/ipc/generated/**`。按域分目录：`apps/`（实例状态、对接拓扑、商店与插件目录、各框架配置校验、麦麦的试聊 / 表情包 / 提示词…）/ `bot/` / `bootstrap/` / `components/` / `docker/` / `events/`（登录、SnowLuma 聚合，日志缓冲）/ `onboarding/` / `overview/` / `performance/` / `release/` / `remote-host/` / `settings/` / `task-queue/` / `terminal/` / `debug/`（调试台的目录整理与命令面板排序、事件流 reduce 与聊天文案、参数表单与校验、收藏整理、历史重放、安全分级 / 错误 / 通道文案、三栏宽度规则）/ `ui/`（错误条文案、相对时间）/ `webui/`，根上还有 `errors.ts`（`errorText`，把 invoke 抛出的裸字符串和 Error 统一成人话）/ `app-meta.ts` / `credits.ts` / `desktop-log.ts`。
 
 `hooks/**`：唯一允许调 `core/services/*` 的层（除 transport 自己用）。组合 `useQuery` / `useMutation` + `subscribeDomainEvents`（订阅）+ domain reducer + 模块级 store。不允许 `import '@tauri-apps/*'`，也不反过来 import `modules/**`。环境探测 `isTauri` 在 `core/domain/runtime/env.ts`（零依赖，transport re-export 它），别从 transport 引。
 
@@ -67,7 +67,7 @@ flowchart TB
 
 ## 3. 落点约定（放哪儿、只留几份）
 
-- 纯逻辑进 `core/domain/<域>/`：派生、校验、状态机、文案表，带单测。hooks 要用的规则不许留在 modules 里让 hooks 反向 import，应用端的对接拓扑、实例状态、Karin / 商店目录规则就是这么挪进 `core/domain/apps/` 的。
+- 纯逻辑进 `core/domain/<域>/`：派生、校验、状态机、文案表；按行为补测试，不要求每个文件各有一份测试。hooks 要用的规则不许留在 modules 里让 hooks 反向 import，应用端的对接拓扑、实例状态、Karin / 商店目录规则就是这么挪进 `core/domain/apps/` 的。
 - 同一件事只留一份：
   - 「N 分钟前」→ `core/domain/ui/relativeTime.ts`
   - 插件目录的筛选 / 排序 / 已装对照 → `core/domain/apps/pluginCatalog.ts`；装、卸、启停任务 → `hooks/apps/usePluginOps.ts`（Karin 市场和应用端商店共用）
@@ -105,13 +105,13 @@ flowchart TB
 - `pnpm run lint` 过（0 error）：静态跨层 import 已被 `eslint.config.mjs` 的 `no-restricted-imports` 拦截，白名单见第 2 节。动态 `import()` 不受规则约束，改到 modules / shared / app 时补一遍 grep，输出只能是第 2 节「现存偏差」里的旧账：
 
       grep -rnE "import\(['\"][^'\"]*(core/services|core/ipc/(transport|mock)|@tauri-apps)" src-ui/modules src-ui/shared src-ui/app
-- `pnpm run typecheck` + `pnpm run test:unit` 通过；`pnpm run test:coverage` 过地板（core/domain + hooks：lines 60 / funcs 71 / branches 79，只防回退不追高）；动了依赖或分包再跑 `pnpm exec vite build --config src-ui/vite.config.ts`
+- `pnpm run typecheck` + `pnpm run test:unit` 通过；需核查覆盖率时用 `pnpm run test:coverage` 代替单测命令（core/domain + hooks：lines 60 / funcs 71 / branches 79，保持阈值）。测试取舍见[夹具边界](testing.md)；动了依赖或分包再跑 `pnpm exec vite build --config src-ui/vite.config.ts`
 
 ## 5. 添加新功能 4 步走
 
 1. transport 不动（真要新的系统能力，比如另一种文件对话框，才加一个不带业务字符串的薄函数）
 2. 在 `core/services/` 加（或扩展）一个 service 文件，集中所有 IPC 字符串，mock 放 `core/ipc/mock/`
-3. 在 `core/domain/` 写所有派生 / 校验 / 状态机，纯函数带单测
+3. 在 `core/domain/` 写派生 / 校验 / 状态机，按业务规则补回归，不为静态映射复制一份断言表
 4. 在 `hooks/` 暴露 React 友好接口（react-query / 模块级 store）；modules 只 consume hook
 
 ## 6. 前端反例

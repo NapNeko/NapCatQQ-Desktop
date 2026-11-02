@@ -24,6 +24,7 @@
 | 核对 Linux 组件支持与校验边界    | [Linux 组件校验矩阵](context/linux-component-validation.md) |
 | 查找已有后端能力                | [后端能力速查](context/capabilities.md) |
 | 了解前端分层与组件约定          | [前端约定](context/frontend.md)         |
+| 选择测试范围、维护夹具          | [测试取舍与夹具边界](context/testing.md) |
 | 查阅历史问题与约束              | [开发经验](context/lessons.md)          |
 | 编写和预览发布说明              | [发版说明维护](releases/README.md)      |
 

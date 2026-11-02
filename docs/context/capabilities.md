@@ -125,7 +125,7 @@ ls 入口：`crates/ncd-domain/src/`、`crates/ncd-traits/src/`、`crates/ncd-ho
 - ncd-watch：远端主机侧监控二进制（探活 + Desktop 离线时 Webhook / 邮件 / 同机 OneBot），`default-features = false` 只给配置 schema，Desktop 用它写 `notify.json`
 - ncd-log：会话日志六段行格式 `format_line`、`log_source_from_target`、`short_module_from_target`。业务代码用带 `target` 的 `tracing`，模块列和过滤粒度看 `src-tauri/src/desktop_log.rs` 的 `default_env_filter`；panic 这类非 tracing 场景才用 `write_session_line`。tracing 不订进 EventBus
 - ncd-template：MiniJinja 模板引擎，compose 等文本生成
-- ncd-test-support：`MockSecretStore`（`fail_next_*` 注入失败）、`TempWorkspace`、`BotConfigBuilder`、路径安全断言、`fixtures/legacy/`
+- ncd-test-support：`MockSecretStore`（一次写入失败注入）、基于 tempfile 的 `TempWorkspace`、`BotConfigBuilder`。复用范围见 [测试取舍与夹具边界](testing.md)。
 
 ## src-tauri（L4 薄壳）
 
