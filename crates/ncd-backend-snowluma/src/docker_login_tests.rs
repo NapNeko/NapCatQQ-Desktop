@@ -163,12 +163,10 @@ async fn capture_reuses_checked_docker_permissions_and_still_revalidates_identit
             .unwrap();
     assert_eq!(snapshot.state, SnowLumaQrLoginState::WaitingForQr);
     let commands = host.commands.lock().unwrap();
-    assert_eq!(
-        commands
+    assert!(
+        !commands
             .iter()
-            .filter(|c| c.args.first().is_some_and(|a| a == "version"))
-            .count(),
-        1
+            .any(|c| c.args.first().is_some_and(|a| a == "version" || a == "compose"))
     );
     assert_eq!(
         commands
