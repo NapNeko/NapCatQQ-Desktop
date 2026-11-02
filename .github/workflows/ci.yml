@@ -62,7 +62,7 @@ jobs:
       # 版本检查在 frontend，版本文件必须进 frontend 过滤；
       # tauri.conf.json 同时在两端过滤内。
       - name: Detect changed areas
-        if: ${{ !inputs.force_full }}
+        if: ${{ !inputs.force_full && github.event_name != 'workflow_dispatch' }}
         uses: dorny/paths-filter@v3
         id: filter
         with:
