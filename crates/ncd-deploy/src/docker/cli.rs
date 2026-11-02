@@ -155,13 +155,9 @@ impl<'h> DockerCli<'h> {
     /// 不需要 compose;它们必须先走这里 probe 一次,否则后续裸 docker 命令在"装了
     /// docker 但当前会话没 socket 权限(没重登 / 没进 docker 组)"的远端会 permission
     /// denied 而不会自动 sudo,部署 / compose down 仍用 ensure_ready(额外要 compose)
-    pub async fn ensure_daemon_ready(&self) -> Result<DockerStatus, DockerCliError> {
-        let status = self.probe_checked().await?;
-        if status.daemon_running {
-            Ok(status)
-        } else {
-            Err(DockerCliError::RuntimeUnavailable { status })
-        }
+    pub async fn ensure_daemon_ready(&self) -> Result<(), DockerCliError> {
+        self.verify_selected_engine().await?;
+        self.management_probe_daemon().await
     }
 
     /// Docker 使用 Client.Version；Linux Podman 使用不初始化运行时的 --version。

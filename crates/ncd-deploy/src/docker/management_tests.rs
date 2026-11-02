@@ -166,6 +166,32 @@ async fn docker_management_prefers_user_daemon_without_compose() {
 }
 
 #[tokio::test]
+async fn daemon_operations_skip_compose_but_deployment_still_requires_it() {
+    use crate::docker::engine::ContainerEngine;
+
+    for engine in [ContainerEngine::Docker, ContainerEngine::Podman] {
+        let host = MockHost::new();
+        let cli = DockerCli::for_engine(&host, Some(engine));
+        cli.ensure_daemon_ready().await.unwrap();
+        cli.logs("abc123", 20).await.unwrap();
+        {
+            let commands = host.commands.lock().unwrap();
+            assert!(commands.iter().any(|c| c.args[0] == "info"));
+            assert!(
+                !commands
+                    .iter()
+                    .any(|c| { c.program == "podman-compose" || c.args[0] == "compose" })
+            );
+            assert_eq!(commands.last().unwrap().args[0], "logs");
+        }
+        assert!(matches!(
+            cli.ensure_ready().await,
+            Err(DockerCliError::RuntimeUnavailable { .. })
+        ));
+    }
+}
+
+#[tokio::test]
 async fn docker_management_uses_sudo_only_for_default_socket_permission() {
     let host = MockHost {
         daemon_error: Some("permission denied connecting to /var/run/docker.sock"),
