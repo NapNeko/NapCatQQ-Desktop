@@ -14,39 +14,12 @@ import type {
 import { withMockDelay } from '../bootstrap.mock';
 import { emitMockEvent } from '../events.mock';
 import { mockAppLogTail, playMockAppRun } from '../app-log.mock';
-import { createMockAppConfigApi, peekKarinHttpAuthKey } from '../app-config.mock';
 import { instances, mockAcceptedTerms, MOCK_TERMS_TEXT, publish, require } from './state';
 import { MOCK_NEOBOT_VERSIONS, simulateInstallTask } from './install-task';
 import { mockAccountView, mockGeneratePassword, mockWebUiAccounts } from './webui-accounts';
 import { mockAppFrameworks } from './manifests';
 
 export const instanceApi = {
-    /** 预览里给一份与真机同形的 Bot 侧配置，好让「原始文件」页的两段都能看到 */
-    linkBotDocuments: async (_id: string) =>
-        withMockDelay([
-            {
-                name: 'onebot11_10001.json',
-                path: 'C:/ProgramData/NapCatQQ Desktop/components/NapCatQQ/config/onebot11_10001.json',
-                text: JSON.stringify(
-                    {
-                        network: {
-                            websocketClients: [
-                                {
-                                    name: 'ncd-app:dc59a8f1',
-                                    enable: true,
-                                    url: 'ws://127.0.0.1:36909/',
-                                    token: 'preview-token',
-                                    messagePostFormat: 'array',
-                                },
-                            ],
-                        },
-                    },
-                    null,
-                    4,
-                ),
-            },
-        ]),
-
     listFrameworks: () => withMockDelay(mockAppFrameworks),
     listInstances: () => withMockDelay(instances.slice()),
 
@@ -232,15 +205,17 @@ export const instanceApi = {
         const base =
             inst.framework_id === 'astrbot'
                 ? `http://127.0.0.1:6185`
-                : inst.framework_id === 'maibot' || inst.framework_id === 'koishi'
-                  ? `http://127.0.0.1:${inst.port}/`
-                  : `http://127.0.0.1:${inst.port}/web`;
+                : inst.framework_id === 'neobot'
+                  ? 'http://127.0.0.1:9981/'
+                  : inst.framework_id === 'maibot' || inst.framework_id === 'koishi'
+                    ? `http://127.0.0.1:${inst.port}/`
+                    : `http://127.0.0.1:${inst.port}/web`;
         const suffix = path?.trim() ? (path.startsWith('/') ? path : `/${path}`) : '';
         return withMockDelay({
             url: `${base.replace(/\/$/, '')}${suffix}`,
             authKey:
                 inst.framework_id === 'karin'
-                    ? peekKarinHttpAuthKey(instanceId)
+                    ? 'mock-karin-webui-key'
                     : inst.framework_id === 'maibot'
                       ? 'Ncd_mockMockMockMockMock'
                       : '',
@@ -275,6 +250,4 @@ export const instanceApi = {
         publish(next, 'auto_start_changed');
         return withMockDelay(next);
     },
-
-    ...createMockAppConfigApi({ require, publish }),
 };

@@ -1,46 +1,18 @@
-import type { AstrBotConfigSchema } from '../ipc/generated/domain/AstrBotConfigSchema';
 // 应用端框架（Karin 等）IPC。
 // 命令字面量只在此文件出现，后端改命令名、查前端调了哪些命令都只看这一处；浏览器预览走 mock。
 
 import { invoke, isTauri } from '../ipc/transport';
 import type {
-    AppLinkBotDocument,
     AppConfigDocument,
     AppConfigText,
-    AppConfigWriteResult,
     AppFrameworkManifest,
     AppInstance,
-    AppInstanceConfig,
-    AppInstanceConfigEnvelope,
     AppInstanceWebUi,
     AppPendingTerms,
-    AppPluginAction,
-    AppPluginConfigSchema,
-    AppStoreInstalled,
-    AppStoreMarketEntry,
-    AppStoreResource,
     AppProjectProbe,
     AppWebUiAccount,
-    AstrBotAbconfInfo,
-    AstrBotDashboardStatus,
-    AstrBotKbCreate,
-    AstrBotKnowledgeBase,
-    AstrBotPersona,
-    AstrBotSessionRule,
-    MaiBotAPIProvider,
-    MaiBotChatSession,
-    MaiBotMCPServerItemConfig,
-    MaiBotMcpStatus,
-    MaiBotMcpTest,
-    MaiBotProviderCheck,
-    MaiBotProviderModel,
-    MaiBotRuntimeStatus,
-    MaiBotStatsSummary,
     CreateAppInstanceRequest,
     ImportAppInstanceRequest,
-    KarinPluginInstalled,
-    KarinPluginMarketEntry,
-    AppPanelResult,
     LogSnapshot,
     OneBotLinkPlan,
     PackageVersions,
@@ -48,6 +20,32 @@ import type {
 import { mockAppFrameworkApi } from '../ipc/mock/app-framework.mock';
 
 export const appFrameworkService = {
+    listConfigDocuments: async (instanceId: string): Promise<AppConfigDocument[]> => {
+        if (!isTauri) return mockAppFrameworkApi.listConfigDocuments(instanceId);
+        return invoke<AppConfigDocument[]>('list_app_config_documents', { instanceId });
+    },
+
+    readConfigText: async (instanceId: string, docId: string): Promise<AppConfigText> => {
+        if (!isTauri) return mockAppFrameworkApi.readConfigText(instanceId, docId);
+        return invoke<AppConfigText>('read_app_config_text', { instanceId, docId });
+    },
+
+    writeConfigText: async (
+        instanceId: string,
+        docId: string,
+        text: string,
+        baseRevision: string | null,
+    ): Promise<AppConfigText> => {
+        if (!isTauri)
+            return mockAppFrameworkApi.writeConfigText(instanceId, docId, text, baseRevision);
+        return invoke<AppConfigText>('write_app_config_text', {
+            instanceId,
+            docId,
+            text,
+            baseRevision,
+        });
+    },
+
     listFrameworks: async (): Promise<AppFrameworkManifest[]> => {
         if (!isTauri) return mockAppFrameworkApi.listFrameworks();
         return invoke<AppFrameworkManifest[]>('list_app_frameworks');
@@ -94,54 +92,6 @@ export const appFrameworkService = {
     install: async (instanceId: string, version?: string | null): Promise<string> => {
         if (!isTauri) return mockAppFrameworkApi.install(instanceId, version);
         return invoke<string>('install_app_instance', { instanceId, version: version ?? null });
-    },
-
-    /**
-     * 代调一次实例自带控制台的面板接口。
-     *
-     * 面板口与凭据都在 Rust 那侧解决；路径受白名单约束（只放行面板自己的 /api/）。
-     * 返回 null = 该框架不提供面板转发，调用方据此不显示相关页签。
-     */
-    /**
-     * 「原始文件」页里的 **Bot 侧** 配置文件（只读）。
-     *
-     * 对接时桌面端会往协议 Bot 的配置里写一条 WS 客户端连接；那些文件在 Bot 的配置目录里，
-     * 不在应用端实例目录，所以单开这个只读入口。未对接 / 远端 Bot / 文件还没生成时是空表。
-     */
-    linkBotDocuments: async (instanceId: string): Promise<AppLinkBotDocument[]> => {
-        if (!isTauri) return mockAppFrameworkApi.linkBotDocuments(instanceId);
-        return invoke<AppLinkBotDocument[]>('app_link_bot_documents', { instanceId });
-    },
-    panelCall: async (
-        instanceId: string,
-        method: 'GET' | 'POST' | 'PUT' | 'DELETE',
-        path: string,
-        body?: unknown,
-    ): Promise<AppPanelResult | null> => {
-        if (!isTauri) return mockAppFrameworkApi.panelCall(instanceId, method, path, body);
-        return invoke<AppPanelResult | null>('app_panel_call', {
-            instanceId,
-            method,
-            path,
-            body: body ?? null,
-        });
-    },
-
-    /**
-     * 记住某实例的面板密码（明文只进本机密钥库；传空串 = 忘掉）。
-     *
-     * 与 resetWebUiPassword 的区别：那个是「桌面端替框架设口令」，这个是
-     * 「框架自己管口令、桌面端只记住」——NeoBot 的面板属于后者。
-     */
-    setPanelPassword: async (instanceId: string, password: string): Promise<void> => {
-        if (!isTauri) return mockAppFrameworkApi.setPanelPassword(instanceId, password);
-        return invoke<void>('set_app_instance_panel_password', { instanceId, password });
-    },
-
-    /** 该实例是否已记住面板密码 */
-    panelPasswordSet: async (instanceId: string): Promise<boolean> => {
-        if (!isTauri) return mockAppFrameworkApi.panelPasswordSet(instanceId);
-        return invoke<boolean>('app_instance_panel_password_set', { instanceId });
     },
 
     /**
@@ -227,309 +177,6 @@ export const appFrameworkService = {
             instanceId,
             password,
         });
-    },
-
-    // ---- 实例配置（类型化 + 原始文件）。失败 reject 的是 AppConfigError 结构体，见 isAppConfigError ----
-
-    readConfig: async (instanceId: string): Promise<AppInstanceConfigEnvelope> => {
-        if (!isTauri) return mockAppFrameworkApi.readConfig(instanceId);
-        return invoke<AppInstanceConfigEnvelope>('read_app_instance_config', { instanceId });
-    },
-
-    /** `baseRevision` 传 null 表示用户选择覆盖别处的改动。 */
-    writeConfig: async (
-        instanceId: string,
-        config: AppInstanceConfig,
-        baseRevision: string | null,
-        confId?: string | null,
-    ): Promise<AppConfigWriteResult> => {
-        if (!isTauri)
-            return mockAppFrameworkApi.writeConfig(instanceId, config, baseRevision, confId);
-        return invoke<AppConfigWriteResult>('write_app_instance_config', {
-            instanceId,
-            config,
-            baseRevision,
-            confId: confId ?? null,
-        });
-    },
-
-    listConfigDocuments: async (instanceId: string): Promise<AppConfigDocument[]> => {
-        if (!isTauri) return mockAppFrameworkApi.listConfigDocuments(instanceId);
-        return invoke<AppConfigDocument[]>('list_app_config_documents', { instanceId });
-    },
-
-    readConfigText: async (instanceId: string, docId: string): Promise<AppConfigText> => {
-        if (!isTauri) return mockAppFrameworkApi.readConfigText(instanceId, docId);
-        return invoke<AppConfigText>('read_app_config_text', { instanceId, docId });
-    },
-
-    writeConfigText: async (
-        instanceId: string,
-        docId: string,
-        text: string,
-        baseRevision: string | null,
-    ): Promise<AppConfigText> => {
-        if (!isTauri) {
-            return mockAppFrameworkApi.writeConfigText(instanceId, docId, text, baseRevision);
-        }
-        return invoke<AppConfigText>('write_app_config_text', {
-            instanceId,
-            docId,
-            text,
-            baseRevision,
-        });
-    },
-
-    listPluginMarket: async (): Promise<KarinPluginMarketEntry[]> => {
-        if (!isTauri) return mockAppFrameworkApi.listPluginMarket();
-        return invoke<KarinPluginMarketEntry[]>('list_karin_plugin_market');
-    },
-
-    listStore: async (
-        frameworkId: string,
-        resource: AppStoreResource,
-    ): Promise<AppStoreMarketEntry[]> => {
-        if (!isTauri) return mockAppFrameworkApi.listStore(frameworkId, resource);
-        return invoke<AppStoreMarketEntry[]>('list_app_store', { frameworkId, resource });
-    },
-
-    listStoreInstalled: async (
-        instanceId: string,
-        resource: AppStoreResource,
-    ): Promise<AppStoreInstalled[]> => {
-        if (!isTauri) return mockAppFrameworkApi.listStoreInstalled(instanceId, resource);
-        return invoke<AppStoreInstalled[]>('list_app_store_installed', { instanceId, resource });
-    },
-
-    listPluginConfigDocs: async (
-        instanceId: string,
-        pluginName: string,
-    ): Promise<AppConfigDocument[]> => {
-        if (!isTauri) return mockAppFrameworkApi.listPluginConfigDocs(instanceId, pluginName);
-        return invoke<AppConfigDocument[]>('list_app_plugin_config_docs', {
-            instanceId,
-            pluginName,
-        });
-    },
-
-    /** null = 该插件没有表单 schema，只能改原文。 */
-    pluginConfigSchema: async (
-        instanceId: string,
-        pluginName: string,
-    ): Promise<AppPluginConfigSchema | null> => {
-        if (!isTauri) return mockAppFrameworkApi.pluginConfigSchema(instanceId, pluginName);
-        return invoke<AppPluginConfigSchema | null>('get_app_plugin_config_schema', {
-            instanceId,
-            pluginName,
-        });
-    },
-
-    listPlugins: async (instanceId: string): Promise<KarinPluginInstalled[]> => {
-        if (!isTauri) return mockAppFrameworkApi.listPlugins(instanceId);
-        return invoke<KarinPluginInstalled[]>('list_app_instance_plugins', { instanceId });
-    },
-
-    submitPluginOp: async (
-        instanceId: string,
-        pluginName: string,
-        action: AppPluginAction,
-        resource?: AppStoreResource,
-    ): Promise<string> => {
-        if (!isTauri) {
-            return mockAppFrameworkApi.submitPluginOp(instanceId, pluginName, action, resource);
-        }
-        return invoke<string>('submit_app_plugin_op', {
-            instanceId,
-            pluginName,
-            action,
-            resource: resource ?? null,
-        });
-    },
-
-    setPluginEnabled: async (
-        instanceId: string,
-        pluginName: string,
-        enabled: boolean,
-        overwrite?: boolean,
-        resource?: AppStoreResource,
-    ): Promise<AppConfigWriteResult> => {
-        if (!isTauri) {
-            return mockAppFrameworkApi.setPluginEnabled(
-                instanceId,
-                pluginName,
-                enabled,
-                overwrite,
-                resource,
-            );
-        }
-        return invoke<AppConfigWriteResult>('set_app_plugin_enabled', {
-            instanceId,
-            pluginName,
-            enabled,
-            overwrite: overwrite ?? null,
-            resource: resource ?? null,
-        });
-    },
-
-    astrbotConfigSchema: async (instanceId: string): Promise<AstrBotConfigSchema> => {
-        if (!isTauri) {
-            const { fallbackAstrBotSchema } = await import('../domain/apps/astrbotAdvanced');
-            return fallbackAstrBotSchema();
-        }
-        return invoke<AstrBotConfigSchema>('astrbot_config_schema', { instanceId });
-    },
-
-    astrbotDashboardStatus: async (instanceId: string): Promise<AstrBotDashboardStatus> => {
-        if (!isTauri) return mockAppFrameworkApi.astrbotDashboardStatus(instanceId);
-        return invoke<AstrBotDashboardStatus>('astrbot_dashboard_status', { instanceId });
-    },
-
-    astrbotListPersonas: async (instanceId: string): Promise<AstrBotPersona[]> => {
-        if (!isTauri) return mockAppFrameworkApi.astrbotListPersonas(instanceId);
-        return invoke<AstrBotPersona[]>('astrbot_list_personas', { instanceId });
-    },
-
-    astrbotUpsertPersona: async (
-        instanceId: string,
-        persona: AstrBotPersona,
-        creating: boolean,
-    ): Promise<AstrBotPersona[]> => {
-        if (!isTauri)
-            return mockAppFrameworkApi.astrbotUpsertPersona(instanceId, persona, creating);
-        return invoke<AstrBotPersona[]>('astrbot_upsert_persona', {
-            instanceId,
-            persona,
-            creating,
-        });
-    },
-
-    astrbotDeletePersona: async (
-        instanceId: string,
-        personaId: string,
-    ): Promise<AstrBotPersona[]> => {
-        if (!isTauri) return mockAppFrameworkApi.astrbotDeletePersona(instanceId, personaId);
-        return invoke<AstrBotPersona[]>('astrbot_delete_persona', { instanceId, personaId });
-    },
-
-    astrbotListKbs: async (instanceId: string): Promise<AstrBotKnowledgeBase[]> => {
-        if (!isTauri) return mockAppFrameworkApi.astrbotListKbs(instanceId);
-        return invoke<AstrBotKnowledgeBase[]>('astrbot_list_kbs', { instanceId });
-    },
-
-    astrbotCreateKb: async (
-        instanceId: string,
-        request: AstrBotKbCreate,
-    ): Promise<AstrBotKnowledgeBase[]> => {
-        if (!isTauri) return mockAppFrameworkApi.astrbotCreateKb(instanceId, request);
-        return invoke<AstrBotKnowledgeBase[]>('astrbot_create_kb', { instanceId, request });
-    },
-
-    astrbotDeleteKb: async (instanceId: string, kbId: string): Promise<AstrBotKnowledgeBase[]> => {
-        if (!isTauri) return mockAppFrameworkApi.astrbotDeleteKb(instanceId, kbId);
-        return invoke<AstrBotKnowledgeBase[]>('astrbot_delete_kb', { instanceId, kbId });
-    },
-
-    astrbotListSessionRules: async (instanceId: string): Promise<AstrBotSessionRule[]> => {
-        if (!isTauri) return mockAppFrameworkApi.astrbotListSessionRules(instanceId);
-        return invoke<AstrBotSessionRule[]>('astrbot_list_session_rules', { instanceId });
-    },
-
-    astrbotUpdateSessionRule: async (
-        instanceId: string,
-        rule: AstrBotSessionRule,
-    ): Promise<AstrBotSessionRule[]> => {
-        if (!isTauri) return mockAppFrameworkApi.astrbotUpdateSessionRule(instanceId, rule);
-        return invoke<AstrBotSessionRule[]>('astrbot_update_session_rule', { instanceId, rule });
-    },
-
-    astrbotDeleteSessionRule: async (
-        instanceId: string,
-        umo: string,
-        ruleKey: string,
-    ): Promise<AstrBotSessionRule[]> => {
-        if (!isTauri) return mockAppFrameworkApi.astrbotDeleteSessionRule(instanceId, umo, ruleKey);
-        return invoke<AstrBotSessionRule[]>('astrbot_delete_session_rule', {
-            instanceId,
-            umo,
-            ruleKey,
-        });
-    },
-
-    astrbotListAbconfs: async (instanceId: string): Promise<AstrBotAbconfInfo[]> => {
-        if (!isTauri) return mockAppFrameworkApi.astrbotListAbconfs(instanceId);
-        return invoke<AstrBotAbconfInfo[]>('astrbot_list_abconfs', { instanceId });
-    },
-
-    astrbotCreateAbconf: async (instanceId: string, name: string): Promise<AstrBotAbconfInfo[]> => {
-        if (!isTauri) return mockAppFrameworkApi.astrbotCreateAbconf(instanceId, name);
-        return invoke<AstrBotAbconfInfo[]>('astrbot_create_abconf', { instanceId, name });
-    },
-
-    astrbotDeleteAbconf: async (
-        instanceId: string,
-        abconfId: string,
-    ): Promise<AstrBotAbconfInfo[]> => {
-        if (!isTauri) return mockAppFrameworkApi.astrbotDeleteAbconf(instanceId, abconfId);
-        return invoke<AstrBotAbconfInfo[]>('astrbot_delete_abconf', { instanceId, abconfId });
-    },
-
-    astrbotListSourceModels: async (instanceId: string, sourceId: string): Promise<string[]> => {
-        if (!isTauri) return mockAppFrameworkApi.astrbotListSourceModels(instanceId, sourceId);
-        return invoke<string[]>('astrbot_list_source_models', { instanceId, sourceId });
-    },
-
-    astrbotListSubagentTools: async (instanceId: string): Promise<string[]> => {
-        if (!isTauri) return mockAppFrameworkApi.astrbotListSubagentTools(instanceId);
-        return invoke<string[]>('astrbot_list_subagent_tools', { instanceId });
-    },
-
-    maibotStatus: async (instanceId: string): Promise<MaiBotRuntimeStatus> => {
-        if (!isTauri) return mockAppFrameworkApi.maibotStatus(instanceId);
-        return invoke<MaiBotRuntimeStatus>('maibot_status', { instanceId });
-    },
-
-    maibotRestart: async (instanceId: string): Promise<void> => {
-        if (!isTauri) return mockAppFrameworkApi.maibotRestart(instanceId);
-        return invoke<void>('maibot_restart', { instanceId });
-    },
-
-    maibotStats: async (instanceId: string, hours: number): Promise<MaiBotStatsSummary> => {
-        if (!isTauri) return mockAppFrameworkApi.maibotStats(instanceId, hours);
-        return invoke<MaiBotStatsSummary>('maibot_stats', { instanceId, hours });
-    },
-
-    maibotChatSessions: async (instanceId: string): Promise<MaiBotChatSession[]> => {
-        if (!isTauri) return mockAppFrameworkApi.maibotChatSessions(instanceId);
-        return invoke<MaiBotChatSession[]>('maibot_chat_sessions', { instanceId });
-    },
-
-    maibotProviderModels: async (
-        instanceId: string,
-        provider: MaiBotAPIProvider,
-    ): Promise<MaiBotProviderModel[]> => {
-        if (!isTauri) return mockAppFrameworkApi.maibotProviderModels(instanceId, provider);
-        return invoke<MaiBotProviderModel[]>('maibot_provider_models', { instanceId, provider });
-    },
-
-    maibotTestProvider: async (
-        instanceId: string,
-        provider: MaiBotAPIProvider,
-    ): Promise<MaiBotProviderCheck> => {
-        if (!isTauri) return mockAppFrameworkApi.maibotTestProvider(instanceId, provider);
-        return invoke<MaiBotProviderCheck>('maibot_test_provider', { instanceId, provider });
-    },
-
-    maibotMcpStatus: async (instanceId: string): Promise<MaiBotMcpStatus> => {
-        if (!isTauri) return mockAppFrameworkApi.maibotMcpStatus(instanceId);
-        return invoke<MaiBotMcpStatus>('maibot_mcp_status', { instanceId });
-    },
-
-    maibotTestMcp: async (
-        instanceId: string,
-        server: MaiBotMCPServerItemConfig,
-    ): Promise<MaiBotMcpTest> => {
-        if (!isTauri) return mockAppFrameworkApi.maibotTestMcp(instanceId, server);
-        return invoke<MaiBotMcpTest>('maibot_test_mcp', { instanceId, server });
     },
 
     setInstanceAutoStart: async (instanceId: string, autoStart: boolean): Promise<AppInstance> => {

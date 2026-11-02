@@ -2,9 +2,7 @@
 // applyLink / unlink 在改实例状态的同时同步写各框架的对接配置。
 import type { AppInstance, OneBotLinkPlan } from '../../types';
 import { withMockDelay } from '../bootstrap.mock';
-import { syncKarinLinkToken, syncMaiBotLink, syncYunzaiLink } from '../app-config.mock';
 import { publish, require } from './state';
-import { syncKoishiLink } from './koishi';
 
 export const linkApi = {
     previewLink: async (instanceId: string, botId: string): Promise<OneBotLinkPlan> => {
@@ -123,18 +121,12 @@ export const linkApi = {
                 linked_at_ms: Date.now(),
             },
         };
-        if (forward) syncMaiBotLink(inst, true);
-        else if (inst.framework_id === 'koishi') syncKoishiLink(inst, botId);
-        else if (inst.framework_id === 'yunzai') syncYunzaiLink(inst, true);
-        else syncKarinLinkToken(instanceId);
         publish(next, 'linked');
         return withMockDelay(next);
     },
 
     unlink: async (instanceId: string): Promise<AppInstance> => {
         const inst = require(instanceId);
-        if (inst.framework_id === 'maibot') syncMaiBotLink(inst, false);
-        if (inst.framework_id === 'koishi') syncKoishiLink(inst, null);
         const next: AppInstance = { ...inst, link: undefined };
         publish(next, 'unlinked');
         return withMockDelay(next);

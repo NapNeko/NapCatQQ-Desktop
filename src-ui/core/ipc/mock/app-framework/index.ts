@@ -2,18 +2,10 @@
 // 键序与原来不同，但调用方只按键取值，行为不变。
 import { instanceApi } from './instance-api';
 import { linkApi } from './link-api';
-import { pluginApi } from './plugin-api';
-import { neobotPanelApi } from './neobot-panel';
-import { mockAstrBotApi } from './astrbot';
-import { mockKoishiApi } from './koishi';
-import { mockMaiBotApi } from './maibot';
+import { configFilesApi } from './config-files';
 
 export const mockAppFrameworkApi = {
     ...instanceApi,
-    ...neobotPanelApi,
     ...linkApi,
-    ...pluginApi,
-    ...mockAstrBotApi,
-    ...mockKoishiApi,
-    ...mockMaiBotApi,
+    ...configFilesApi,
 };

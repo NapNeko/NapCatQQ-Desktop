@@ -17,13 +17,6 @@ export function useAppInstanceEventsBridge(): void {
                 // 列表还没拉过就不凭一条事件造出半张表，等页面自己拉
                 old === undefined ? old : upsertInstance(old, event.instance),
             );
-            const reason = event.reason ?? '';
-            if (reason === 'linked' || reason === 'unlinked' || reason === 'port_changed') {
-                queryClient.invalidateQueries({
-                    queryKey: ['appInstanceConfig', event.instance.id],
-                });
-                queryClient.invalidateQueries({ queryKey: ['appConfigText', event.instance.id] });
-            }
             return;
         }
         if (event.kind !== 'deployment_task_changed') return;

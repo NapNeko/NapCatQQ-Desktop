@@ -2,7 +2,7 @@
 import type { AppConfigFormat } from "./AppConfigFormat";
 
 /**
- * 应用端实例的一个可编辑配置文件（框架适配器声明；原始文件 Tab 与类型化读写共用）
+ * 框架适配器声明的可编辑配置文件。
  */
 export type AppConfigDocument = { 
 /**
@@ -18,6 +18,6 @@ label: string,
  */
 rel_path: string, format: AppConfigFormat, 
 /**
- * 应用端自己会热加载该文件；false 表示改完要重启实例
+ * 应用端会自动重载文件中的运行期配置；不代表所有字段都能即时生效。
  */
-hot_reload: boolean, };
+hot_reload: boolean, reload_note?: string | null, };

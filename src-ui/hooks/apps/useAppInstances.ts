@@ -5,7 +5,7 @@
 import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { appFrameworkService } from '../../core/services/app-framework.service';
-import { openExternalUrl } from '../../core/ipc/transport';
+import { openExternalOrReport } from '../useOpenExternal';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
 import { errorText } from '../../core/domain/errors';
 import { pushErrorBar } from '../ui/pushErrorBar';
@@ -223,11 +223,11 @@ export function useAppInstances() {
                             key: `app-webui-copy-fail:${id}`,
                             tone: 'warning',
                             title: '未能复制密钥',
-                            content: '到连接页查看 HTTP 鉴权密钥',
+                            content: `WebUI 登录密钥：${key}`,
                         });
                     }
                 }
-                await openExternalUrl(url);
+                openExternalOrReport(url);
             } catch (err) {
                 pushErrorBar({
                     key: `app-webui:${id}`,
