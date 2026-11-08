@@ -38,6 +38,8 @@ export interface BackendSettings {
     uiModeOnStartup: UiModeOnStartup;
     /** 登录 Windows 后自动启动本程序 */
     launchOnStartup: boolean;
+    /** Linux:WebKitGTK 硬件合成;启动时读取,改动重启生效 */
+    linuxWebviewAcceleration: boolean;
     minimizeToTrayCountsAsHidden: boolean;
     notifyOnOffline: boolean;
     notifyOnBotCrashed: boolean;

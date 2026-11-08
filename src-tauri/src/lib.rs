@@ -35,6 +35,8 @@ pub mod lightweight;
 pub mod lightweight_scheduler;
 #[cfg(target_os = "linux")]
 pub(crate) mod linux_tray;
+#[cfg(target_os = "linux")]
+pub mod linux_webview;
 #[cfg(any(windows, target_os = "linux"))]
 pub mod native_panel;
 pub mod onebot_endpoint_resolver;
@@ -113,9 +115,10 @@ pub fn run() {
     desktop_log::init_desktop_logging(&data_root, event_bus.clone());
     #[cfg(target_os = "linux")]
     tracing::info!(
-        "Linux WebView 渲染配置: WEBKIT_DISABLE_DMABUF_RENDERER={:?}, WEBKIT_DISABLE_COMPOSITING_MODE={:?}",
+        "Linux WebView 渲染配置: WEBKIT_DISABLE_DMABUF_RENDERER={:?}, WEBKIT_DISABLE_COMPOSITING_MODE={:?}, 硬件合成={:?}",
         std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER"),
-        std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE")
+        std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE"),
+        linux_webview::effective_acceleration()
     );
     container_engine::initialize(&data_root);
     #[cfg(windows)]

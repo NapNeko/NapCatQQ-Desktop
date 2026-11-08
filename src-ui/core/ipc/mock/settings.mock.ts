@@ -31,6 +31,7 @@ export const mockBackendSettings: BackendSettings = {
     enterLightweightDelaySecs: 300,
     uiModeOnStartup: 'normal',
     launchOnStartup: false,
+    linuxWebviewAcceleration: false,
     minimizeToTrayCountsAsHidden: true,
     notifyOnOffline: true,
     notifyOnBotCrashed: true,

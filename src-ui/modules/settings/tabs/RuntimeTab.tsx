@@ -3,6 +3,7 @@ import { RefreshCw } from 'lucide-react';
 import { clampRemoteHostHealthProbeIntervalMs } from '../../../core/domain/remote-host/healthProbeSettings';
 import { Button, NumberField, Select, Switch } from '../../../shared/ui';
 import { useLocalNodeCandidates } from '../../../hooks/settings/useLocalNodeCandidates';
+import { localOs } from '../../../core/domain/runtime/env';
 import type { SettingsDraft } from '../settings-draft';
 import { McpSection } from './McpSection';
 import {
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export function RuntimeTab({ draft, patchDraft }: Props) {
+    const isLinux = localOs() === 'linux';
     const { candidates, probing, probeComplete, reprobe } = useLocalNodeCandidates();
 
     const configuredNode = draft?.snowlumaNodePath?.trim() ?? '';
@@ -128,6 +130,24 @@ export function RuntimeTab({ draft, patchDraft }: Props) {
                     />
                 </FieldRow>
             </SettingsSection>
+
+            {isLinux && (
+                <SettingsSection
+                    title="界面渲染（Linux）"
+                    description="修改后需重启 NapCatQQ Desktop 生效。"
+                >
+                    <FieldRow
+                        label="WebView 硬件加速"
+                        description="关闭时使用 WebKitGTK 兼容渲染，规避部分显卡 / 桌面组合下的黑屏、闪烁；在 4K、高刷新率或开启缩放时关闭会明显掉帧。确认当前环境显示正常后再打开。"
+                        isLast
+                    >
+                        <Switch
+                            checked={draft.linuxWebviewAcceleration}
+                            onCheckedChange={(v) => patchDraft({ linuxWebviewAcceleration: v })}
+                        />
+                    </FieldRow>
+                </SettingsSection>
+            )}
         </SettingsTabSections>
     );
 }

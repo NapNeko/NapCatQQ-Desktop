@@ -151,6 +151,7 @@ function fromDto(dto: AppSettingsDto, preferDiskUi = false): BackendSettings {
         enterLightweightDelaySecs: Number(dto.settings.enterLightweightDelaySecs ?? 300),
         uiModeOnStartup: normalizeUiModeOnStartup(dto.settings.uiModeOnStartup),
         launchOnStartup: dto.settings.launchOnStartup ?? false,
+        linuxWebviewAcceleration: dto.settings.linuxWebviewAcceleration ?? false,
         minimizeToTrayCountsAsHidden: dto.settings.minimizeToTrayCountsAsHidden ?? true,
         notifyOnOffline: dto.settings.notifyOnOffline ?? true,
         notifyOnBotCrashed: dto.settings.notifyOnBotCrashed ?? true,
@@ -223,6 +224,7 @@ type AppSettingsDtoInvoke = {
         enterLightweightDelaySecs: number;
         uiModeOnStartup: string;
         launchOnStartup: boolean;
+        linuxWebviewAcceleration: boolean;
         minimizeToTrayCountsAsHidden: boolean;
         notifyOnOffline: boolean;
         notifyOnBotCrashed: boolean;
@@ -331,6 +333,7 @@ function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
             enterLightweightDelaySecs: s.enterLightweightDelaySecs,
             uiModeOnStartup: s.uiModeOnStartup,
             launchOnStartup: s.launchOnStartup,
+            linuxWebviewAcceleration: s.linuxWebviewAcceleration,
             minimizeToTrayCountsAsHidden: s.minimizeToTrayCountsAsHidden,
             notifyOnOffline: s.notifyOnOffline,
             notifyOnBotCrashed: s.notifyOnBotCrashed,

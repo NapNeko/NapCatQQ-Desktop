@@ -496,6 +496,9 @@ pub struct AppSettings {
     /// SnowLuma 本地安装包类型偏好
     #[serde(rename = "snowlumaPackage", default)]
     pub snowluma_package: Option<SnowLumaLinuxPackage>,
+    /// Linux:让 WebKitGTK 使用硬件合成(默认关闭,以兼容渲染兜底)。启动时读取,改动重启生效。
+    #[serde(rename = "linuxWebviewAcceleration", default)]
+    pub linux_webview_acceleration: bool,
 }
 
 /// 桌面通知开关集合
@@ -553,6 +556,7 @@ impl Default for AppSettings {
             mcp: McpServerSettings::default(),
             snowluma_node_path: None,
             snowluma_package: None,
+            linux_webview_acceleration: false,
         }
     }
 }

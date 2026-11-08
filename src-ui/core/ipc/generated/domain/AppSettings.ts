@@ -120,4 +120,8 @@ snowlumaNodePath: string | null,
 /**
  * SnowLuma 本地安装包类型偏好
  */
-snowlumaPackage: SnowLumaLinuxPackage | null, };
+snowlumaPackage: SnowLumaLinuxPackage | null, 
+/**
+ * Linux:让 WebKitGTK 使用硬件合成(默认关闭,以兼容渲染兜底)。启动时读取,改动重启生效。
+ */
+linuxWebviewAcceleration: boolean, };

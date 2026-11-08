@@ -87,6 +87,7 @@ export function draftFromBackendAndPrefs(
         enterLightweightDelaySecs: backend.enterLightweightDelaySecs,
         uiModeOnStartup: backend.uiModeOnStartup,
         launchOnStartup: backend.launchOnStartup,
+        linuxWebviewAcceleration: backend.linuxWebviewAcceleration,
         minimizeToTrayCountsAsHidden: backend.minimizeToTrayCountsAsHidden,
         notifyOnOffline: backend.notifyOnOffline,
         notifyOnBotCrashed: backend.notifyOnBotCrashed,
@@ -165,6 +166,7 @@ export function backendSlice(draft: SettingsDraft): BackendSettings {
         enterLightweightDelaySecs: draft.enterLightweightDelaySecs,
         uiModeOnStartup: draft.uiModeOnStartup,
         launchOnStartup: draft.launchOnStartup,
+        linuxWebviewAcceleration: draft.linuxWebviewAcceleration,
         minimizeToTrayCountsAsHidden: draft.minimizeToTrayCountsAsHidden,
         notifyOnOffline: draft.notifyOnOffline,
         notifyOnBotCrashed: draft.notifyOnBotCrashed,
@@ -234,6 +236,7 @@ export function isSettingsDirty(draft: SettingsDraft, backend: BackendSettings):
         draft.enterLightweightDelaySecs !== baseline.enterLightweightDelaySecs ||
         draft.uiModeOnStartup !== baseline.uiModeOnStartup ||
         draft.launchOnStartup !== baseline.launchOnStartup ||
+        draft.linuxWebviewAcceleration !== baseline.linuxWebviewAcceleration ||
         draft.minimizeToTrayCountsAsHidden !== baseline.minimizeToTrayCountsAsHidden ||
         draft.notifyOnOffline !== baseline.notifyOnOffline ||
         draft.notifyOnBotCrashed !== baseline.notifyOnBotCrashed ||

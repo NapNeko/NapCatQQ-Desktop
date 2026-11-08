@@ -124,15 +124,14 @@ Desktop 每次启动远端 Bot 都会按自己保存的配置重写远端的 one
 
 Linux 版默认让 WebKitGTK 走兼容渲染（软件合成），用来规避部分显卡与桌面环境下画面卡死、闪烁的问题。代价是 4K、高刷新率或开启分数缩放时合成全部落在 CPU 上：界面操作会掉帧，空闲时进程也有可见的 CPU 占用。
 
-确认本机显卡驱动正常、界面没有黑屏或闪烁后，可以让应用保留 WebKitGTK 的硬件合成：
+确认本机显卡驱动正常、界面没有黑屏或闪烁后，可以打开硬件合成：
 
-```bash
-NCD_LINUX_WEBVIEW_ACCELERATION=1 NapCatQQ-Desktop
-```
+- 设置 → 运行 → 界面渲染（Linux）→ 打开「WebView 硬件加速」，保存后**重启** NapCatQQ Desktop 生效；
+- 也可以用环境变量临时覆盖（优先级高于设置页）：`NCD_LINUX_WEBVIEW_ACCELERATION=1 NapCatQQ-Desktop` 打开硬件合成，`NCD_LINUX_WEBVIEW_ACCELERATION=0 NapCatQQ-Desktop` 强制兼容渲染，便于排查。
 
-从桌面图标启动时，把 `/usr/share/applications/NapCatQQ Desktop.desktop` 复制到 `~/.local/share/applications/`，在 `Exec=` 的行首加 `env NCD_LINUX_WEBVIEW_ACCELERATION=1`。启动日志里 `Linux WebView 渲染配置` 一行会记录实际生效的变量：两个 `WEBKIT_DISABLE_*` 都是 `None` 时，说明硬件合成没有被关闭。
+启动日志里 `Linux WebView 渲染配置` 一行会记录实际生效的变量与「硬件合成」状态：两个 `WEBKIT_DISABLE_*` 都是 `None`、`硬件合成=Some(true)` 时，说明走的是硬件合成。
 
-如果打开后反而黑屏、闪烁或画面不再刷新，说明这个环境需要兼容渲染，去掉该变量即可。
+如果打开后反而黑屏、闪烁或画面不再刷新，说明这个环境需要兼容渲染，关掉开关（或把环境变量设为 `0`）即可。
 
 ---
 
